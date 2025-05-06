@@ -30,9 +30,9 @@ Alicia_duo_sdk/
 │   ├── gripper_control.py
 │   └── read_angles.py
 ├── LICENSE
-├── README.md               # 本文档
-├── requirements.txt        # 依赖项 (如果需要)
-└── setup.py                # Python 包安装脚本 (如果需要)
+├── README.md              
+├── requirements.txt        # 依赖项 
+└── setup.py                # Python 包安装脚本
 ```
 
 ## 快速开始
@@ -55,10 +55,4 @@ Alicia_duo_sdk/
 *   [示例说明](docs/examples.md)
 *   [API 参考](docs/api_reference.md)
 
-## 贡献
 
-欢迎提交问题和拉取请求。
-
-## 许可证
-
-请查看 [LICENSE](LICENSE) 文件。

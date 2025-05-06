@@ -12,7 +12,7 @@
 1.  **克隆或下载 SDK**
     如果您拥有 Git，可以克隆此仓库：
     ```bash
-    git clone <repository_url> # 将 <repository_url> 替换为实际的仓库地址
+    git clone https://github.com/Xianova-Robotics/Alicia_duo_sdk.git
     cd Alicia_duo_sdk
     ```
     或者，您可以下载 SDK 的压缩包并解压到您的本地计算机。
@@ -26,7 +26,6 @@
     ```bash
     pip install -r requirements.txt
     ```
-    (注意：根据您提供的 `requirements.txt` 文件内容，它当前为空。如果未来添加了依赖，请确保该文件是最新的。)
 
 3.  **硬件连接**
     *   使用 USB 数据线将 Alicia Duo 机械臂连接到您的计算机。
