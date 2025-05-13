@@ -122,20 +122,43 @@ class ArmController:
         state = self.data_parser.get_joint_state()
         return state.gripper, state.button1, state.button2
     
+    # def read_joint_state(self) -> JointState:
+    #     """
+    #     读取完整的机械臂状态
+        
+    #     Returns:
+    #         JointState: 包括关节角度、夹爪角度和按钮状态的完整状态
+    #     """
+    #     # 尝试读取并解析最新的数据
+    #     frame = self.serial_comm.read_frame()
+    #     if frame:
+    #         self.data_parser.parse_frame(frame)
+        
+    #     # 返回当前状态，无论是否有新数据
+    #     return self.data_parser.get_joint_state()
+    
     def read_joint_state(self) -> JointState:
         """
-        读取完整的机械臂状态
-        
-        Returns:
-            JointState: 包括关节角度、夹爪角度和按钮状态的完整状态
+        读取完整的机械臂状态。
+        会尝试读取并处理串口缓冲区中所有可用的最新数据帧。
         """
-        # 尝试读取并解析最新的数据
-        frame = self.serial_comm.read_frame()
-        if frame:
-            self.data_parser.parse_frame(frame)
+        frames_processed_in_this_call = 0
+        # 循环读取，直到串口缓冲区没有更多完整帧
+        while True:
+            frame = self.serial_comm.read_frame()
+            if frame:
+                # data_parser.parse_frame 会更新其内部状态
+                self.data_parser.parse_frame(frame)
+                frames_processed_in_this_call += 1
+            else:
+                # 没有更多完整帧可读，或者串口读取超时/无数据
+                break
         
-        # 返回当前状态，无论是否有新数据
-        return self.data_parser.get_joint_state()
+        if self.debug_mode and frames_processed_in_this_call > 1:
+            logger.debug(f"在单次 read_joint_state 调用中处理了 {frames_processed_in_this_call} 帧")
+            
+        # 返回 DataParser 中基于最后解析的帧的当前状态
+        return self.data_parser.get_joint_state()  
     
     def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None) -> bool:
         """
