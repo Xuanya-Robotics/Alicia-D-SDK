@@ -21,7 +21,7 @@ def main():
     print("=== 机械臂数据读取示例 ===")
     
     # 创建控制器实例 (可选参数: port="/dev/ttyUSB0", debug_mode=True)
-    controller = ArmController(debug_mode=True)
+    controller = ArmController(debug_mode=False)
     
     try:
         # 连接到机械臂
@@ -43,11 +43,12 @@ def main():
             gripper_angle_deg = round(state.gripper * controller.RAD_TO_DEG, 2)
             
             # 打印状态信息
-            print("\r\033[K", end="")  # 清除当前行
-            print(f"时间: {time.strftime('%H:%M:%S')} | ", end="")
-            print(f"关节角度(度): {joint_angles_deg} | ", end="")
-            print(f"夹爪: {gripper_angle_deg}度 | ", end="")
-            print(f"按钮: {'按下' if state.button1 else '释放'}/{('按下' if state.button2 else '释放')}", end="")
+            print(f"关节角度(度): {joint_angles_deg} ")
+            print(f"夹爪角度(度): {gripper_angle_deg} ")
+            print(f"按钮状态: {state.button1} {state.button2} ")
+            
+            
+            
             
             # 短暂延时
             time.sleep(0.2)
