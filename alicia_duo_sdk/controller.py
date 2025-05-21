@@ -1,6 +1,7 @@
 import math
 import time
 import logging
+import threading
 from typing import List, Optional, Union, Tuple, Dict
 
 from .serial_comm import SerialComm
@@ -63,8 +64,24 @@ class ArmController:
             (5, 1.0),    # 关节6 -> 舵机9 (正向)
         ]
         
+        # 状态更新线程相关
+        self._update_thread = None
+        self._stop_thread = threading.Event()
+        self._thread_running = False
+        
         logger.info("初始化机械臂控制模块")
         logger.info(f"调试模式: {'启用' if debug_mode else '禁用'}")
+    
+    def __del__(self):
+        """析构函数，确保线程和连接在对象销毁时被正确清理"""
+        try:
+            # 停止状态更新线程
+            self.stop_update_thread()
+            # 断开连接
+            self.disconnect()
+        except Exception as e:
+            if hasattr(logger, 'error'):  # 在某些情况下logger可能已被销毁
+                logger.error(f"析构函数中出现异常: {str(e)}")
     
     def connect(self) -> bool:
         """
@@ -73,11 +90,110 @@ class ArmController:
         Returns:
             bool: 连接是否成功
         """
-        return self.serial_comm.connect()
+        result = self.serial_comm.connect()
+        if result:
+            # 连接成功后启动状态更新线程
+            self.start_update_thread()
+        return result
     
     def disconnect(self):
         """断开与机械臂的连接"""
+        # 先停止状态更新线程
+        self.stop_update_thread()
         self.serial_comm.disconnect()
+    
+    def start_update_thread(self):
+        """启动状态更新线程"""
+        if self._update_thread is not None and self._thread_running:
+            logger.info("状态更新线程已经在运行")
+            return
+        
+        # 重置停止信号
+        self._stop_thread.clear()
+        self._thread_running = True
+        
+        # 创建并启动线程
+        self._update_thread = threading.Thread(target=self._update_loop, daemon=True)
+        self._update_thread.start()
+        logger.info("状态更新线程已启动")
+    
+    def stop_update_thread(self):
+        """停止状态更新线程"""
+        if self._update_thread is None or not self._thread_running:
+            return
+        
+        # 设置停止信号
+        self._stop_thread.set()
+        self._thread_running = False
+        
+        # 等待线程结束
+        if self._update_thread.is_alive():
+            self._update_thread.join(timeout=2.0)
+        
+        self._update_thread = None
+        logger.info("状态更新线程已停止")
+    
+    def is_update_thread_running(self) -> bool:
+        """
+        检查状态更新线程是否正在运行
+        
+        Returns:
+            bool: 线程是否正在运行
+        """
+        return self._thread_running and self._update_thread is not None and self._update_thread.is_alive()
+    
+    def get_update_thread_status(self) -> Dict:
+        """
+        获取状态更新线程的详细信息
+        
+        Returns:
+            Dict: 包含线程状态的字典
+        """
+        return {
+            "running": self.is_update_thread_running(),
+            "enabled": self._thread_running,
+            "thread_exists": self._update_thread is not None,
+            "thread_alive": self._update_thread.is_alive() if self._update_thread else False,
+            "stop_flag_set": self._stop_thread.is_set()
+        }
+    
+    def _update_loop(self):
+        """状态更新线程主循环"""
+        update_interval = 0.01  # 更新间隔，单位：秒
+        error_count = 0
+        max_consecutive_errors = 10
+        
+        logger.info("状态更新线程开始运行")
+        
+        while not self._stop_thread.is_set():
+            try:
+                # 读取一帧数据
+                frame = self.serial_comm.read_frame()
+                if frame:
+                    # 解析数据帧，更新内部状态
+                    self.data_parser.parse_frame(frame)
+                    # 成功读取帧后重置错误计数
+                    error_count = 0
+                
+
+            except Exception as e:
+                error_count += 1
+                logger.error(f"状态更新线程异常: {str(e)}")
+                
+                # 如果连续错误达到上限，尝试重新连接
+                if error_count >= max_consecutive_errors:
+                    logger.warning(f"连续发生{error_count}个错误，尝试重新连接串口")
+                    try:
+                        self.serial_comm.disconnect()
+                        time.sleep(1.0)
+                        self.serial_comm.connect()
+                        error_count = 0
+                    except Exception as connect_error:
+                        logger.error(f"重新连接失败: {str(connect_error)}")
+                
+                time.sleep(1.0)  # 出错后等待较长时间再重试
+        
+        logger.info("状态更新线程已结束运行")
     
     def read_joint_angles(self) -> Optional[List[float]]:
         """
@@ -86,18 +202,7 @@ class ArmController:
         Returns:
             Optional[List[float]]: 6个关节的角度列表（弧度），读取失败则返回None
         """
-        # 尝试读取一帧数据
-        frame = self.serial_comm.read_frame()
-        
-        # 如果读取到数据并且是关节数据，则解析
-        if frame and frame[1] == self.CMD_JOINT:
-            parse_result = self.data_parser.parse_frame(frame)
-            if parse_result and parse_result["type"] == "joint_data":
-                # 获取关节状态
-                state = self.data_parser.get_joint_state()
-                return state.angles
-        
-        # 如果没有读取到关节数据，则返回已知的最后状态
+        # 直接返回当前状态，不需要额外读取数据
         return self.data_parser.get_joint_state().angles
     
     def read_gripper_data(self) -> Tuple[float, bool, bool]:
@@ -107,18 +212,7 @@ class ArmController:
         Returns:
             Tuple[float, bool, bool]: 夹爪角度（弧度）、按钮1状态、按钮2状态
         """
-        # 尝试读取一帧数据
-        frame = self.serial_comm.read_frame()
-        
-        # 如果读取到数据并且是夹爪数据，则解析
-        if frame and frame[1] == self.CMD_GRIPPER:
-            parse_result = self.data_parser.parse_frame(frame)
-            if parse_result and parse_result["type"] == "gripper_data":
-                # 获取夹爪状态
-                state = self.data_parser.get_joint_state()
-                return state.gripper, state.button1, state.button2
-        
-        # 如果没有读取到夹爪数据，则返回已知的最后状态
+        # 直接返回当前状态，不需要额外读取数据
         state = self.data_parser.get_joint_state()
         return state.gripper, state.button1, state.button2
     
@@ -126,21 +220,10 @@ class ArmController:
     def read_joint_state(self) -> JointState:
         """
         读取完整的机械臂状态。
-        会尝试读取并处理串口缓冲区中所有可用的最新数据帧。
+        由于已有后台线程持续更新，所以直接返回当前状态。
         """
-        latest_frame = None
-        # 循环读取，直到串口缓冲区没有更多完整帧
-        while True:
-            frame = self.serial_comm.read_frame()
-            if not frame:
-                break
-            latest_frame=frame
-        if latest_frame:
-            self.data_parser.parse_frame(latest_frame)
-        
-            
-        # 返回 DataParser 中基于最后解析的帧的当前状态
-        return self.data_parser.get_joint_state()  
+        # 直接返回当前状态，不需要额外读取数据
+        return self.data_parser.get_joint_state()
     
     def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None, wait_for_completion: bool = True, timeout: float = 10.0, tolerance: float = 0.08) -> bool:
         """
@@ -176,11 +259,11 @@ class ArmController:
         # 如果需要等待运动完成
         #print(f"wait_for_completion: {wait_for_completion}, result: {result}")
         if wait_for_completion and result:
-            print("等待机械臂运动完成")
+            logger.info("等待机械臂运动完成")
             start_time = time.time()
             while time.time() - start_time < timeout:
-                # 读取当前关节状态
-                current_state = self.read_joint_state()
+                # 读取当前关节状态 - 因为有后台线程更新，所以直接获取最新状态
+                current_state = self.data_parser.get_joint_state()
                 current_angles = current_state.angles
                 
                 # 检查是否到达目标位置
@@ -196,8 +279,8 @@ class ArmController:
                         logger.debug("机械臂到达目标位置")
                     break
                 
-                # 短暂延时，避免频繁读取
-                #time.sleep(0.1)
+                # 短暂延时，避免过于频繁检查
+                time.sleep(0.02)
             
             # 检查是否超时
             if time.time() - start_time >= timeout:
@@ -232,8 +315,8 @@ class ArmController:
                 
             start_time = time.time()
             while time.time() - start_time < timeout:
-                # 读取当前夹爪状态
-                current_state = self.read_joint_state()
+                # 读取当前夹爪状态 - 因为有后台线程更新，所以直接获取最新状态
+                current_state = self.data_parser.get_joint_state()
                 gripper_angle = current_state.gripper
                 
                 # 检查是否到达目标位置
@@ -242,8 +325,8 @@ class ArmController:
                         logger.debug("夹爪到达目标位置")
                     break
                 
-                # 短暂延时，避免频繁读取
-                time.sleep(0.05)
+                # 短暂延时，避免过于频繁检查
+                time.sleep(0.02)
             
             # 检查是否超时
             if time.time() - start_time >= timeout:

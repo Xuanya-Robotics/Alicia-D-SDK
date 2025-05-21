@@ -36,8 +36,10 @@ def main():
         # 持续读取数据
         while True:
             # 读取完整状态
+
+            #start_time = time.time()
             state = controller.read_joint_state()
-            
+            #print("读取完成",time.time()-start_time)
             # 转换为度数显示
             joint_angles_deg = [round(angle * controller.RAD_TO_DEG, 2) for angle in state.angles]
             gripper_angle_deg = round(state.gripper * controller.RAD_TO_DEG, 2)

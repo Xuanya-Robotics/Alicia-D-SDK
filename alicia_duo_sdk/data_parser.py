@@ -216,13 +216,24 @@ class DataParser:
         Returns:
             Dict: 解析结果
         """
+        # 解析按钮状态 (如果数据帧中包含)
+        button1 = False
+        button2 = False
+        if len(frame) >= 10:  # 确保有足够的数据
+            # 假设第8、9个字节包含按钮状态信息
+            button1 = (frame[8] & 0x01) != 0
+            button2 = (frame[9] & 0x01) != 0
+
         # 检查最小长度
         if len(frame) < 8:
             logger.warning("夹爪数据帧长度不足")
             return None
         
+        if button1:
+             gripper_raw = frame[6] | (frame[7] << 8)
         # 从字节4-5提取夹爪角度
-        gripper_raw = frame[4] | (frame[5] << 8)
+        else:
+            gripper_raw = frame[4] | (frame[5] << 8)
         
         # 范围检查
         if gripper_raw < 2048 or gripper_raw > 2900:
@@ -234,13 +245,7 @@ class DataParser:
         # 转换为弧度
         gripper_rad = angle_deg * self.DEG_TO_RAD
         
-        # 解析按钮状态 (如果数据帧中包含)
-        button1 = False
-        button2 = False
-        if len(frame) >= 10:  # 确保有足够的数据
-            # 假设第8、9个字节包含按钮状态信息
-            button1 = (frame[8] & 0x01) != 0
-            button2 = (frame[9] & 0x01) != 0
+
         
         # 更新存储的数据
         self._gripper_angle = gripper_rad
