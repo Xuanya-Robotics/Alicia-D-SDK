@@ -122,54 +122,39 @@ class ArmController:
         state = self.data_parser.get_joint_state()
         return state.gripper, state.button1, state.button2
     
-    # def read_joint_state(self) -> JointState:
-    #     """
-    #     读取完整的机械臂状态
-        
-    #     Returns:
-    #         JointState: 包括关节角度、夹爪角度和按钮状态的完整状态
-    #     """
-    #     # 尝试读取并解析最新的数据
-    #     frame = self.serial_comm.read_frame()
-    #     if frame:
-    #         self.data_parser.parse_frame(frame)
-        
-    #     # 返回当前状态，无论是否有新数据
-    #     return self.data_parser.get_joint_state()
     
     def read_joint_state(self) -> JointState:
         """
         读取完整的机械臂状态。
         会尝试读取并处理串口缓冲区中所有可用的最新数据帧。
         """
-        frames_processed_in_this_call = 0
+        latest_frame = None
         # 循环读取，直到串口缓冲区没有更多完整帧
         while True:
             frame = self.serial_comm.read_frame()
-            if frame:
-                # data_parser.parse_frame 会更新其内部状态
-                self.data_parser.parse_frame(frame)
-                frames_processed_in_this_call += 1
-            else:
-                # 没有更多完整帧可读，或者串口读取超时/无数据
+            if not frame:
                 break
+            latest_frame=frame
+        if latest_frame:
+            self.data_parser.parse_frame(latest_frame)
         
-        if self.debug_mode and frames_processed_in_this_call > 1:
-            logger.debug(f"在单次 read_joint_state 调用中处理了 {frames_processed_in_this_call} 帧")
             
         # 返回 DataParser 中基于最后解析的帧的当前状态
         return self.data_parser.get_joint_state()  
     
-    def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None) -> bool:
+    def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None, wait_for_completion: bool = True, timeout: float = 10.0, tolerance: float = 0.08) -> bool:
         """
         设置关节角度（弧度）
         
         Args:
             joint_angles: 6个关节的角度列表（弧度）
             gripper_angle: 夹爪角度（弧度），如果为None则不发送夹爪命令
+            wait_for_completion: 是否等待运动完成
+            timeout: 等待运动完成的超时时间（秒）
+            tolerance: 角度误差容忍度（弧度）
             
         Returns:
-            bool: 命令是否成功发送
+            bool: 命令是否成功发送和执行
         """
         # 验证输入
         if len(joint_angles) != self.joint_count:
@@ -185,26 +170,87 @@ class ArmController:
         
         # 如果需要控制夹爪
         if gripper_angle is not None and result:
-            time.sleep(0.02)  # 短暂延时，避免连续发送导致丢包
+            #time.sleep(0.02)  # 短暂延时，避免连续发送导致丢包
             result = self.set_gripper(gripper_angle)
+        
+        # 如果需要等待运动完成
+        #print(f"wait_for_completion: {wait_for_completion}, result: {result}")
+        if wait_for_completion and result:
+            print("等待机械臂运动完成")
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                # 读取当前关节状态
+                current_state = self.read_joint_state()
+                current_angles = current_state.angles
+                
+                # 检查是否到达目标位置
+                reached = True
+                for i in range(self.joint_count):
+                    if abs(current_angles[i] - joint_angles[i]) > tolerance:
+                        reached = False
+                        break
+                
+                # 如果到达目标位置，退出循环
+                if reached:
+                    if self.debug_mode:
+                        logger.debug("机械臂到达目标位置")
+                    break
+                
+                # 短暂延时，避免频繁读取
+                #time.sleep(0.1)
+            
+            # 检查是否超时
+            if time.time() - start_time >= timeout:
+                logger.warning("等待机械臂运动完成超时")
+                return False
             
         return result
     
-    def set_gripper(self, angle_rad: float) -> bool:
+    def set_gripper(self, angle_rad: float, wait_for_completion: bool = True, timeout: float = 5.0, tolerance: float = 0.1) -> bool:
         """
         设置夹爪角度（弧度）
         
         Args:
             angle_rad: 夹爪角度（弧度）
+            wait_for_completion: 是否等待夹爪运动完成
+            timeout: 等待夹爪运动完成的超时时间（秒）
+            tolerance: 角度误差容忍度（弧度）
             
         Returns:
-            bool: 命令是否成功发送
+            bool: 命令是否成功发送和执行
         """
         # 构造夹爪控制帧
         frame = self._build_gripper_frame(angle_rad)
         
         # 发送夹爪控制命令
-        return self.serial_comm.send_data(frame)
+        result = self.serial_comm.send_data(frame)
+        
+        # 如果需要等待夹爪运动完成
+        if wait_for_completion and result:
+            if self.debug_mode:
+                logger.debug(f"等待夹爪运动到目标位置: {round(angle_rad * self.RAD_TO_DEG, 2)}度")
+                
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                # 读取当前夹爪状态
+                current_state = self.read_joint_state()
+                gripper_angle = current_state.gripper
+                
+                # 检查是否到达目标位置
+                if abs(gripper_angle - angle_rad) <= tolerance:
+                    if self.debug_mode:
+                        logger.debug("夹爪到达目标位置")
+                    break
+                
+                # 短暂延时，避免频繁读取
+                time.sleep(0.05)
+            
+            # 检查是否超时
+            if time.time() - start_time >= timeout:
+                logger.warning("等待夹爪运动完成超时")
+                return False
+        
+        return result
     
     def set_zero_position(self) -> bool:
         """

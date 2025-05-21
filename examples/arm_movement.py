@@ -21,7 +21,7 @@ def main():
     print("=== 机械臂运动控制示例 ===")
     
     # 创建控制器实例
-    controller = ArmController()
+    controller = ArmController(debug_mode=False)
     
     try:
         # 连接到机械臂
@@ -31,6 +31,10 @@ def main():
             
         print("连接成功")
         
+        # 初始化夹爪位置
+        print("初始化夹爪位置...")
+        controller.set_gripper(0 * controller.DEG_TO_RAD, wait_for_completion=True)
+        
         # 读取初始位置
         initial_state = controller.read_joint_state()
         initial_angles = [round(angle * controller.RAD_TO_DEG, 2) for angle in initial_state.angles]
@@ -39,8 +43,8 @@ def main():
         # 1. 演示关节控制 - 移动到零位置
         print("\n将所有关节移动到零位置...")
         zero_angles = [0.0] * 6  # 6个关节角度都设为0
-        controller.set_joint_angles(zero_angles)
-        time.sleep(2)
+        result = controller.set_joint_angles(zero_angles, wait_for_completion=True)
+        print(f"移动到零位置结果: {result}")
         
         # 读取当前位置
         current_state = controller.read_joint_state()
@@ -55,23 +59,23 @@ def main():
             test_angles[i] = 30 * controller.DEG_TO_RAD
             
             print(f"移动关节{i+1}到30度...")
-            controller.set_joint_angles(test_angles)
-            time.sleep(1.5)
+            controller.set_joint_angles(test_angles, wait_for_completion=True)
             
             # 移动回零位置
-            controller.set_joint_angles(zero_angles)
-            time.sleep(1)
+            print(f"移动关节{i+1}回零位置...")
+            controller.set_joint_angles(zero_angles, wait_for_completion=True)
         
+        # 演示夹爪控制
+        print("\n演示夹爪控制...")
+        print("打开夹爪...")
+        controller.set_gripper(100 * controller.DEG_TO_RAD, wait_for_completion=True)
+        
+        print("关闭夹爪...")
+        controller.set_gripper(0 * controller.DEG_TO_RAD, wait_for_completion=True)
         
         # 回到零位置
-        controller.set_joint_angles(zero_angles)
-        time.sleep(1)
-        
-
-        
-
-        
-        
+        print("\n回到零位置...")
+        controller.set_joint_angles(zero_angles, wait_for_completion=True)
         
         print("\n演示完成!")
         
