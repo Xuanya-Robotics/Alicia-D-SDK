@@ -18,14 +18,20 @@
     或者，您可以下载 SDK 的压缩包并解压到您的本地计算机。
 
 2.  **安装依赖项**
-    SDK 主要依赖 `pyserial` 库。您可以使用 pip 安装它：
+    创建conda环境（必须）：
     ```bash
-    pip install pyserial
+    conda create -n alicia_duo_sdk python=3.8
+    conda activate alicia_duo_sdk
     ```
-    如果项目包含 `requirements.txt` 文件，您可以运行：
+    安装库以及依赖：
     ```bash
     pip install -r requirements.txt
+
+    conda install -c conda-forge python-orocos-kdl
+
+    pip install -e .
     ```
+
 
 3.  **硬件连接**
     *   使用 USB 数据线将 Alicia Duo 机械臂连接到您的计算机。

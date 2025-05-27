@@ -250,7 +250,7 @@ class SerialComm:
                 
         except Exception as e:
             logger.error(f"读取数据异常: {str(e)}")
-            return None
+            return 9999999
     
     def _serial_data_check(self, data: List[int]) -> bool:
         """

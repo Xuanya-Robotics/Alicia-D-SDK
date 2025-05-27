@@ -67,12 +67,15 @@ from alicia_duo_sdk.controller import ArmController
 
 ### 设置与控制
 
-*   `set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None) -> bool`
+*   `set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None, wait_for_completion: bool = True, timeout: float = 10.0, tolerance: float = 0.08) -> bool`
     设置机械臂六个关节的目标角度。
     *   **参数**:
         *   `joint_angles` (`List[float]`): 包含六个目标关节角度（单位：弧度）的列表。列表长度必须为6。
         *   `gripper_angle` (`float`, 可选): 夹爪的目标角度（单位：弧度）。如果提供此参数，则在设置关节角度后会接着发送夹爪控制命令。默认为 `None` (不控制夹爪)。
-    *   **返回**: `bool` - 如果命令成功发送则为 `True`，否则为 `False`。
+        *   `wait_for_completion` (`bool`, 可选): 是否等待运动完成后再返回。默认为 `True`。
+        *   `timeout` (`float`, 可选): 等待运动完成的最大时间（单位：秒）。默认为 `10.0`。
+        *   `tolerance` (`float`, 可选): 判断运动是否完成的角度误差容忍度（单位：弧度）。默认为 `0.08`。
+    *   **返回**: `bool` - 如果命令成功发送并执行（如果等待完成）则为 `True`，否则为 `False`。
 
 *   `set_gripper(self, angle_rad: float) -> bool`
     设置夹爪的开合角度。
@@ -91,6 +94,25 @@ from alicia_duo_sdk.controller import ArmController
 *   `disable_torque(self) -> bool`
     禁用所有关节的力矩。机械臂关节将可以被自由拖动（进入“示教模式”或“自由驱动模式”）。
     *   **返回**: `bool` - 如果命令成功发送则为 `True`，否则为 `False`。
+
+### 运动学函数
+
+*   `forward_kinematics_alicia_duo(self, joint_angles_rad: List[float]) -> Tuple[List[float], List[float], List[float]]`
+    计算机械臂的正向运动学，根据关节角度计算末端执行器的位置和姿态。
+    *   **参数**:
+        *   `joint_angles_rad` (`List[float]`): 包含六个关节角度（单位：弧度）的列表。
+    *   **返回**: `Tuple[List[float], List[float], List[float]]` - 一个包含以下元素的元组：
+        *   `position_xyz` (`List[float]`): 末端执行器的位置 [x, y, z]。
+        *   `quaternion_xyzw` (`List[float]`): 末端执行器的姿态，四元数表示 [x, y, z, w]。
+        *   `rpy` (`List[float]`): 末端执行器的姿态，欧拉角表示 [roll, pitch, yaw]。
+
+*   `inverse_kinematics_alicia_duo(self, target_position_xyz: List[float], target_quaternion_xyzw: List[float], initial_joint_angles_rad: Optional[List[float]] = None) -> Optional[List[float]]`
+    计算机械臂的逆向运动学，根据末端执行器的目标位置和姿态计算所需的关节角度。
+    *   **参数**:
+        *   `target_position_xyz` (`List[float]`): 末端执行器的目标位置 [x, y, z]。
+        *   `target_quaternion_xyzw` (`List[float]`): 末端执行器的目标姿态，四元数表示 [x, y, z, w]。
+        *   `initial_joint_angles_rad` (`List[float]`, 可选): 初始猜测的关节角度（单位：弧度），用于迭代求解。如果不提供，默认使用零位姿态。
+    *   **返回**: `Optional[List[float]]` - 如果成功求解，返回包含六个关节角度（单位：弧度）的列表；如果求解失败，返回 `None`。
 
 ## `alicia_duo_sdk.data_parser.JointState`
 

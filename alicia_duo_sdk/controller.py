@@ -3,6 +3,8 @@ import time
 import logging
 import threading
 from typing import List, Optional, Union, Tuple, Dict
+import PyKDL
+import numpy as np
 
 from .serial_comm import SerialComm
 from .data_parser import DataParser, JointState
@@ -68,10 +70,14 @@ class ArmController:
         self._update_thread = None
         self._stop_thread = threading.Event()
         self._thread_running = False
+
+        self.chain= self.create_alicia_duo_kinematic_chain()
         
         logger.info("初始化机械臂控制模块")
         logger.info(f"调试模式: {'启用' if debug_mode else '禁用'}")
-    
+
+        self.disconnect()
+
     def __del__(self):
         """析构函数，确保线程和连接在对象销毁时被正确清理"""
         try:
@@ -173,26 +179,19 @@ class ArmController:
                     # 解析数据帧，更新内部状态
                     self.data_parser.parse_frame(frame)
                     # 成功读取帧后重置错误计数
-                    error_count = 0
-                
 
+                if frame == 9999999:
+                    #logger.error("检测到严重的串口通信异常，机械臂可能已断开连接")
+                    # 停止线程并清理资源
+                    #self._destroy_self("机械臂连接已丢失")
+                    break  # 确保线程退出循环
+                    
             except Exception as e:
-                error_count += 1
                 logger.error(f"状态更新线程异常: {str(e)}")
                 
-                # 如果连续错误达到上限，尝试重新连接
-                if error_count >= max_consecutive_errors:
-                    logger.warning(f"连续发生{error_count}个错误，尝试重新连接串口")
-                    try:
-                        self.serial_comm.disconnect()
-                        time.sleep(1.0)
-                        self.serial_comm.connect()
-                        error_count = 0
-                    except Exception as connect_error:
-                        logger.error(f"重新连接失败: {str(connect_error)}")
                 
-                time.sleep(1.0)  # 出错后等待较长时间再重试
-        
+                break
+        self._thread_running = False
         logger.info("状态更新线程已结束运行")
     
     def read_joint_angles(self) -> Optional[List[float]]:
@@ -225,7 +224,7 @@ class ArmController:
         # 直接返回当前状态，不需要额外读取数据
         return self.data_parser.get_joint_state()
     
-    def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None, wait_for_completion: bool = True, timeout: float = 10.0, tolerance: float = 0.08) -> bool:
+    def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None, wait_for_completion: bool = True, timeout: float = 5.0, tolerance: float = 0.08) -> bool:
         """
         设置关节角度（弧度）
         
@@ -549,3 +548,207 @@ class ArmController:
         
         # 对2取模
         return checksum % 2
+    
+    @staticmethod # <--- 添加装饰器
+    def create_alicia_duo_kinematic_chain():
+        """
+        Hardcodes the kinematic chain for alicia_duo based on the URDF.
+        Returns a PyKDL.Chain object.
+        """
+        chain = PyKDL.Chain()
+
+        # Helper to create PyKDL.Frame from xyz, rpy
+        def create_frame(xyz, rpy):
+            return PyKDL.Frame(
+                PyKDL.Rotation.RPY(rpy[0], rpy[1], rpy[2]),
+                PyKDL.Vector(xyz[0], xyz[1], xyz[2])
+            )
+        
+        # For revolute joints, the origin within the Joint object itself is typically (0,0,0)
+        # as the transformation to the joint's position is handled by the segment's structure.
+        joint_local_origin = PyKDL.Vector(0.0, 0.0, 0.0) # Common for revolute joints
+
+        # --- Segment 0: Fixed transform from base_link to Joint1 origin ---
+        f_tip_base_to_j1 = create_frame(xyz=[0, 0, 0.0745], rpy=[0, 0, 0])
+        chain.addSegment(PyKDL.Segment("base_to_j1_segment",
+                                    PyKDL.Joint(PyKDL.Joint.Fixed), # Using .Fixed as per previous discussion
+                                    f_tip_base_to_j1))
+
+        # --- Segment 1: Joint1 ---
+        joint1_axis = PyKDL.Vector(0, 0, 1)
+        f_tip_j1_to_j2 = create_frame(xyz=[-4E-05, 0, 0.09361], rpy=[-1.5708, -1.4701, 0])
+        chain.addSegment(PyKDL.Segment("Link1_J1",
+                                    PyKDL.Joint("Joint1", joint_local_origin, joint1_axis, PyKDL.Joint.RotAxis), # MODIFIED
+                                    f_tip_j1_to_j2))
+
+        # --- Segment 2: Joint2 ---
+        joint2_axis = PyKDL.Vector(0, 0, -1)
+        f_tip_j2_to_j3 = create_frame(xyz=[0.22471, 0, 0.0004], rpy=[0, 0, -2.4569])
+        chain.addSegment(PyKDL.Segment("Link2_J2",
+                                    PyKDL.Joint("Joint2", joint_local_origin, joint2_axis, PyKDL.Joint.RotAxis), # MODIFIED
+                                    f_tip_j2_to_j3))
+
+        # --- Segment 3: Joint3 ---
+        joint3_axis = PyKDL.Vector(0, 0, -1)
+        f_tip_j3_to_j4 = create_frame(xyz=[0.00211, -0.0969, -0.0005], rpy=[1.5708, 0, 0])
+        chain.addSegment(PyKDL.Segment("Link3_J3",
+                                    PyKDL.Joint("Joint3", joint_local_origin, joint3_axis, PyKDL.Joint.RotAxis), # MODIFIED
+                                    f_tip_j3_to_j4))
+
+        # --- Segment 4: Joint4 ---
+        joint4_axis = PyKDL.Vector(0, 0, -1)
+        f_tip_j4_to_j5 = create_frame(xyz=[0.00014, 0.0002, 0.12011], rpy=[-1.5708, 0, 0])
+        chain.addSegment(PyKDL.Segment("Link4_J4",
+                                    PyKDL.Joint("Joint4", joint_local_origin, joint4_axis, PyKDL.Joint.RotAxis), # MODIFIED
+                                    f_tip_j4_to_j5))
+
+        # --- Segment 5: Joint5 ---
+        joint5_axis = PyKDL.Vector(0, 0, -1)
+        f_tip_j5_to_j6 = create_frame(xyz=[-0.00389, -0.0592, 0.00064], rpy=[1.5708, 0, 0])
+        chain.addSegment(PyKDL.Segment("Link5_J5",
+                                    PyKDL.Joint("Joint5", joint_local_origin, joint5_axis, PyKDL.Joint.RotAxis), # MODIFIED
+                                    f_tip_j5_to_j6))
+
+        # --- Segment 6: Joint6 ---
+        T_J6_to_GraspBase = create_frame(xyz=[0,0,0], rpy=[0,0,0])
+        T_GraspBase_to_tool0 = create_frame(xyz=[-0.0065308, -0.00063845, 0.11382], rpy=[0,0,0])
+        f_tip_j6_to_tool0 = T_J6_to_GraspBase * T_GraspBase_to_tool0
+
+        joint6_axis = PyKDL.Vector(0, 0, -1)
+        chain.addSegment(PyKDL.Segment("Link6_J6_to_tool0",
+                                    PyKDL.Joint("Joint6", joint_local_origin, joint6_axis, PyKDL.Joint.RotAxis), # MODIFIED
+                                    f_tip_j6_to_tool0))
+        return chain
+    
+    def forward_kinematics_alicia_duo(self,joint_angles_rad):
+        """
+        Calculates the forward kinematics for the alicia_duo robot.
+
+        Args:
+            joint_angles_rad (list or tuple of 6 floats): Joint angles in radians
+                                                        for Joint1 to Joint6.
+
+        Returns:
+            tuple: (position_xyz, quaternion_xyzw, yaw_rad)
+                position_xyz (list): [x, y, z] of tool0
+                quaternion_xyzw (list): [x, y, z, w] of tool0
+                yaw_rad (float): Yaw angle of tool0 in radians
+        """
+        if len(joint_angles_rad) != 6:
+            raise ValueError("Expected 6 joint angles.")
+
+        chain = self.chain  # Use the pre-defined kinematic chain
+        fk_solver = PyKDL.ChainFkSolverPos_recursive(chain)
+
+        # PyKDL JntArray for joint angles. Note that the chain has 7 segments,
+        # but only 6 are actuated. The JntArray size should match num actuated joints.
+        kdl_joint_angles = PyKDL.JntArray(6)
+        for i in range(6):
+            kdl_joint_angles[i] = joint_angles_rad[i]
+
+        # Frame to store the result
+        tool0_frame = PyKDL.Frame()
+
+        # Calculate forward kinematics
+        ret = fk_solver.JntToCart(kdl_joint_angles, tool0_frame)
+        if ret < 0:
+            raise RuntimeError("PyKDL forward kinematics solver failed.")
+
+        # Extract position
+        pos = tool0_frame.p
+        position_xyz = [pos.x(), pos.y(), pos.z()]
+
+        # Extract rotation (quaternion and RPY)
+        rot = tool0_frame.M
+        quaternion_xyzw = list(rot.GetQuaternion()) # Returns (x, y, z, w)
+        rpy = rot.GetRPY() # Returns (roll, pitch, yaw)
+
+        return position_xyz, quaternion_xyzw, rpy
+    
+
+    def inverse_kinematics_alicia_duo(self, target_position_xyz, target_quaternion_xyzw, initial_joint_angles_rad=None):
+        """
+        计算alicia_duo机器人的逆运动学，仅使用ChainIkSolverPos_NR_JL求解器。
+        
+        参数:
+            chain (PyKDL.Chain): 机器人运动链。
+            target_position_xyz (list of 3 floats): 工具目标位置[x, y, z]。
+            target_quaternion_xyzw (list of 4 floats): 工具目标四元数[x, y, z, w]。
+            initial_joint_angles_rad (list of 6 floats, optional): 关节角度初始猜测值。
+                                                                若为None，使用零位姿态。
+        
+        返回:
+            list of 6 floats: 成功求解的关节角度(弧度)，失败则返回None。
+        """
+        # 基本参数验证
+        chain=self.chain
+
+        num_joints = chain.getNrOfJoints()
+
+        # 设置关节限制
+        q_min_rad = PyKDL.JntArray(num_joints)
+        q_max_rad = PyKDL.JntArray(num_joints)
+        
+        margin = 0.1  # 10度余量
+        limits = [
+            (-2.16 + margin, 2.16 - margin),  # Joint 1
+            (-3.14 + margin, 3.14 - margin),  # Joint 2
+            (-3.14 + margin, 3.14 - margin),  # Joint 3
+            (-3.14 + margin, 3.14 - margin),  # Joint 4
+            (-3.14 + margin, 3.14 - margin),  # Joint 5
+            (-3.14 + margin, 3.14 - margin)   # Joint 6
+        ]
+        
+        for i in range(num_joints):
+            q_min_rad[i] = limits[i][0]
+            q_max_rad[i] = limits[i][1]
+
+        # 准备目标帧
+        target_vector = PyKDL.Vector(target_position_xyz[0], target_position_xyz[1], target_position_xyz[2])
+        
+        # 四元数标准化
+        quat_array = np.array(target_quaternion_xyzw, dtype=float)
+        quat_norm = np.linalg.norm(quat_array)
+        if quat_norm == 0:
+            raise ValueError("四元数范数为零")
+        quat_normalized = quat_array / quat_norm
+        
+        try:
+            target_rotation = PyKDL.Rotation.Quaternion(
+                float(quat_normalized[0]), 
+                float(quat_normalized[1]), 
+                float(quat_normalized[2]), 
+                float(quat_normalized[3])
+            )
+            target_frame = PyKDL.Frame(target_rotation, target_vector)
+        except Exception as e:
+            print(f"创建目标帧时出错: {e}")
+            return None
+
+        # 设置初始猜测
+        if initial_joint_angles_rad is None or len(initial_joint_angles_rad) != num_joints:
+            initial_joint_angles_rad = [0.0] * num_joints
+        
+        q_init = PyKDL.JntArray(num_joints)
+        for i in range(num_joints):
+            # 确保初始猜测在关节限制内
+            q_init[i] = max(limits[i][0], min(limits[i][1], initial_joint_angles_rad[i]))
+        
+        # 创建求解器
+        fk_solver = PyKDL.ChainFkSolverPos_recursive(chain)
+        vel_solver = PyKDL.ChainIkSolverVel_pinv(chain)
+        ik_solver = PyKDL.ChainIkSolverPos_NR_JL(chain, q_min_rad, q_max_rad,
+                                                fk_solver, vel_solver,
+                                                2500, 1e-5)  # 使用固定的迭代次数和精度
+        
+        # 求解
+        q_out = PyKDL.JntArray(num_joints)
+        ret_val = ik_solver.CartToJnt(q_init, target_frame, q_out)
+        
+        # 检查结果
+        if ret_val >= 0:
+            # 求解成功
+            solved_angles = [q_out[i] for i in range(num_joints)]
+            return solved_angles
+        print(f"IK求解失败 (返回值: {ret_val})")
+        return None
