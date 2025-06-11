@@ -56,7 +56,7 @@ def main():
         for i in range(6):
             # 移动当前关节到30度
             test_angles = [0.0] * 6
-            test_angles[i] = 30 * controller.DEG_TO_RAD
+            test_angles[i] = 15 * controller.DEG_TO_RAD
             
             print(f"移动关节{i+1}到30度...")
             controller.set_joint_angles(test_angles, wait_for_completion=True)
