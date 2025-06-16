@@ -21,7 +21,7 @@ def main():
     print("=== 机械臂夹爪控制示例 ===")
     
     # 创建控制器实例
-    controller = ArmController(debug_mode=True)
+    controller = ArmController(debug_mode=False)
     
     try:
         # 连接到机械臂

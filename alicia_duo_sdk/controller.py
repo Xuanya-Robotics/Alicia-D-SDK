@@ -18,9 +18,9 @@ class ArmController:
     """机械臂控制模块"""
     
     # 常量定义
-    DEG_TO_RAD = math.pi / 180.0  # 角度转弧度系数
-    RAD_TO_DEG = 180.0 / math.pi  # 弧度转角度系数
     
+    RAD_TO_DEG = 180.0 / math.pi  # 弧度转角度系数
+    DEG_TO_RAD = math.pi / 180.0  # 角度转弧度系数
     # 帧常量
     FRAME_HEADER = 0xAA
     FRAME_FOOTER = 0xFF

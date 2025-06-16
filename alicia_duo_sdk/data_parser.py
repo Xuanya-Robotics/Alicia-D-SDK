@@ -103,7 +103,7 @@ class DataParser:
             JointState: 当前关节状态
         """
         return JointState(
-            angles=self._joint_angles.copy(),
+            angles=self._joint_angles,
             gripper=self._gripper_angle,
             timestamp=self._last_update_time,
             button1=self._button1,
@@ -234,7 +234,7 @@ class DataParser:
         # 从字节4-5提取夹爪角度
         else:
             gripper_raw = frame[4] | (frame[5] << 8)
-        
+        # print("gripper_raw", gripper_raw)
         # 范围检查
         if gripper_raw < 2048 or gripper_raw > 2900:
             gripper_raw = max(2048, min(gripper_raw, 2900))
