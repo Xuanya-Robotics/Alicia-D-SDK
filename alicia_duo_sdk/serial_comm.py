@@ -208,9 +208,8 @@ class SerialComm:
                 byte_data = self.serial_port.read(1)
                 if not byte_data:
                     continue
-                    
+    
                 byte_val = byte_data[0]
-                
                 if not start_found:
                     # 寻找起始标记
                     if byte_val == 0xAA:
@@ -252,6 +251,28 @@ class SerialComm:
             logger.error(f"读取数据异常: {str(e)}")
             return 9999999
     
+    def draw_frame(self) -> Optional[List[int]]:
+        try:
+            if not self.serial_port or not self.serial_port.is_open:
+                if not self.connect():
+                    return None
+            
+            # 检查是否有数据可读
+            if self.serial_port.in_waiting == 0:
+                return None
+            
+            raw_bytes = self.serial_port.read(self.serial_port.in_waiting)
+            if raw_bytes:
+                print("[原始串口数据] ->", ' '.join(f'{b:02X}' for b in raw_bytes))
+
+        except Exception as e:
+            print(f"[串口调试异常] {e}")
+            return 9999
+            
+
+
+
+
     def _serial_data_check(self, data: List[int]) -> bool:
         """
         验证数据的校验和
