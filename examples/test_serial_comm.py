@@ -1,13 +1,11 @@
 import serial
 
-port = "/dev/cu.usbserial-1440"  # 你的串口设备名
-baudrate = 115200  # 或你设备要求的 921600
-ser = serial.Serial(port, baudrate, timeout=1)
+port = "/dev/cu.usbserial-1430"  # 你的串口设备名
+baudrate = 1000000  # 或你设备要求的 921600
 
 print("开始读取串口数据（查找帧头 AA）...")
-import serial
 
-ser = serial.Serial('/dev/cu.usbserial-1440', 115200, timeout=1)
+ser = serial.Serial(port, baudrate, timeout=1)
 frame = bytearray()
 
 try:

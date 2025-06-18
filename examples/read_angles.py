@@ -20,8 +20,8 @@ def main():
     """主函数"""
     print("=== 机械臂数据读取示例 ===")
     
-    # 创建控制器实例 (可选参数: port="/dev/ttyUSB0", debug_mode=True)
-    controller = ArmController(port="/dev/cu.usbserial-1440", debug_mode=True)
+    # 创建控制器实例 (可选参数: port="/dev/ttyUSB0", debug_mode=True) 
+    controller = ArmController(debug_mode=False)
     
     try:
         # 连接到机械臂
