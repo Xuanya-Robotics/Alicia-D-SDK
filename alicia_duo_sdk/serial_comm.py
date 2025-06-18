@@ -26,6 +26,7 @@ class SerialComm:
         """
         self.port_name = port
         self.baudrate = baudrate
+        self.baudrate_default = 921600
         self.baudrate_macOS = 1000000
         self.timeout = timeout
         self.debug_mode = debug_mode
@@ -67,13 +68,14 @@ class SerialComm:
                 print("Found cu port")
 
                 # 检查波特率是否为macOS所能识别的
-                if self.baudrate == 921600:
-                    self.baudrate = self.baudrate_macOS
-                    logger.info(f"将波特率从默认 {self.baudrate} 调整为macOS所能识别的 {self.baudrate_macOS}")
+                if self.baudrate == self.baudrate_default:
+                    self.baudrate = self.baudrate_macOS # 更改为macOS能识别的波特率1000000
+                    logger.info(f"将波特率从默认 {self.baudrate_default} 调整为macOS所能识别的 {self.baudrate_macOS}")
 
+                # 如果有指定波特率则不做更改，只log出来
                 else:
                     logger.info(f"当前指定波特率为 {self.baudrate}, 该波特率macOS可能不能识别")
-                    
+
             # 设置串口参数
             self.serial_port = serial.Serial(
                 port=port,
@@ -272,27 +274,7 @@ class SerialComm:
             logger.error(f"读取数据异常: {str(e)}")
             return 9999999
     
-    def draw_frame(self) -> Optional[List[int]]:
-        try:
-            if not self.serial_port or not self.serial_port.is_open:
-                if not self.connect():
-                    return None
-            
-            # 检查是否有数据可读
-            if self.serial_port.in_waiting == 0:
-                return None
-            
-            raw_bytes = self.serial_port.read(self.serial_port.in_waiting)
-            if raw_bytes:
-                print("[原始串口数据] ->", ' '.join(f'{b:02X}' for b in raw_bytes))
-
-        except Exception as e:
-            print(f"[串口调试异常] {e}")
-            return 9999
-            
-
-
-
+        
 
     def _serial_data_check(self, data: List[int]) -> bool:
         """
