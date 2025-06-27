@@ -41,7 +41,16 @@ def main():
         print("按 Ctrl+C 退出")
         print("-" * 50)
         if arm_type == "follower":
+            print("操作臂调零前需进入无力矩状态导致无法维持当前状态，请确保安全")
+            print("按 Enter 键开始...")
             controller.disable_torque()
+            try:
+                input("准备好后请按 Enter 键开始操作臂调零...")
+                print("正在执行调零校准...")
+            except KeyboardInterrupt:
+                print("\n调零操作已取消")
+                return
+
         controller.set_zero_position()
     except KeyboardInterrupt:
         print("\n\n程序已停止")
