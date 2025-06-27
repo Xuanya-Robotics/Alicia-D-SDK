@@ -1,3 +1,13 @@
+"""
+
+for Alicia-D follower arm zero calibration example
+python alicia_duo_zero_calibration.py --follower True
+
+for Alicia-D leader arm zero calibration example
+python alicia_duo_zero_calibration.py
+
+"""
+
 import os
 import sys
 import argparse
