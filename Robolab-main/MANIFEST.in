@@ -1,0 +1,1 @@
+recursive-include robolab/formatter/mjcf_parser/ *

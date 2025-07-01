@@ -1,0 +1,11 @@
+
+.idea/
+__pycache__/
+
+
+assets/urdf/franka_description/rdf/
+/assets/mjcf/bruce/rdf/
+/assets/mjcf/hotu/rdf/
+/assets/mjcf/wheel_chair/sdf/
+
+robolab.egg-info/

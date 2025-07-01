@@ -1,0 +1,30 @@
+<mujoco model="wheelchair">
+
+    <!-- Assets: define meshes and textures -->
+    <asset>
+        <!-- Import the .obj file as a mesh -->
+        <mesh name="wheelchair_mesh" file="meshes/Sedia Rotelle A1.stl" scale="0.03 0.03 0.03"/>
+
+        <!-- Define textures -->
+<!--        <texture name="diffuse_tex" type="2d" file="textures/Sedia-Rotelle-A1_diffuse.jpg"/>-->
+<!--        <texture name="gloss_tex" type="2d" file="textures/Sedia-Rotelle-A1_gloss.jpg"/>-->
+<!--        <texture name="specular_tex" type="2d" file="textures/Sedia-Rotelle-A1_specular.jpg"/>-->
+<!--        <texture name="uvlighting_tex" type="2d" file="textures/Sedia_Copertonata-UVLightingMap.jpg"/>-->
+
+        <!-- Define a material that uses the textures -->
+<!--        <material name="wheelchair_material" texture="diffuse_tex" specular="0.5" shininess="0.8" reflectance="0.2"/>-->
+    </asset>
+
+    <!-- World body: define the wheelchair model -->
+    <worldbody>
+        <!-- Wheelchair base -->
+        <body name="wheelchair_base" pos="0 0 0.5">
+            <!-- Use the mesh for the wheelchair -->
+            <geom type="mesh" contype="0" conaffinity="0" density="0" rgba="1 1 1 1"
+                      mesh="wheelchair_mesh"/>
+            <geom name="wheelchair_geom" type="mesh" mesh="wheelchair_mesh" contype="0"/>
+
+            <!-- Add more geometries for chair components if needed -->
+        </body>
+    </worldbody>
+</mujoco>

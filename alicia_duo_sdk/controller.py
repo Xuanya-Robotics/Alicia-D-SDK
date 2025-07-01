@@ -4,6 +4,7 @@ import logging
 import threading
 from typing import List, Optional, Union, Tuple, Dict
 import PyKDL
+
 import numpy as np
 
 from .serial_comm import SerialComm
@@ -556,7 +557,6 @@ class ArmController:
         Returns a PyKDL.Chain object.
         """
         chain = PyKDL.Chain()
-
         # Helper to create PyKDL.Frame from xyz, rpy
         def create_frame(xyz, rpy):
             return PyKDL.Frame(
@@ -569,49 +569,49 @@ class ArmController:
         joint_local_origin = PyKDL.Vector(0.0, 0.0, 0.0) # Common for revolute joints
 
         # --- Segment 0: Fixed transform from base_link to Joint1 origin ---
-        f_tip_base_to_j1 = create_frame(xyz=[0, 0, 0.0745], rpy=[0, 0, 0])
+        f_tip_base_to_j1 = create_frame(xyz=[0, 0, 0.1445], rpy=[0, 0, 0])
         chain.addSegment(PyKDL.Segment("base_to_j1_segment",
                                     PyKDL.Joint(PyKDL.Joint.Fixed), # Using .Fixed as per previous discussion
                                     f_tip_base_to_j1))
 
         # --- Segment 1: Joint1 ---
         joint1_axis = PyKDL.Vector(0, 0, 1)
-        f_tip_j1_to_j2 = create_frame(xyz=[-4E-05, 0, 0.09361], rpy=[-1.5708, -1.4701, 0])
+        f_tip_j1_to_j2 = create_frame(xyz=[0, 0, 0.025106], rpy=[-1.5708, -1.5708, 0])
         chain.addSegment(PyKDL.Segment("Link1_J1",
                                     PyKDL.Joint("Joint1", joint_local_origin, joint1_axis, PyKDL.Joint.RotAxis), # MODIFIED
                                     f_tip_j1_to_j2))
 
         # --- Segment 2: Joint2 ---
         joint2_axis = PyKDL.Vector(0, 0, -1)
-        f_tip_j2_to_j3 = create_frame(xyz=[0.22471, 0, 0.0004], rpy=[0, 0, -2.4569])
+        f_tip_j2_to_j3 = create_frame(xyz=[0.22367, 0.022494, -5E-05], rpy=[0, 0, 2.3562])
         chain.addSegment(PyKDL.Segment("Link2_J2",
                                     PyKDL.Joint("Joint2", joint_local_origin, joint2_axis, PyKDL.Joint.RotAxis), # MODIFIED
                                     f_tip_j2_to_j3))
 
         # --- Segment 3: Joint3 ---
         joint3_axis = PyKDL.Vector(0, 0, -1)
-        f_tip_j3_to_j4 = create_frame(xyz=[0.00211, -0.0969, -0.0005], rpy=[1.5708, 0, 0])
+        f_tip_j3_to_j4 = create_frame(xyz=[0.0988, 0.00211, -0.0001], rpy=[1.5708, 0, 1.5708])
         chain.addSegment(PyKDL.Segment("Link3_J3",
                                     PyKDL.Joint("Joint3", joint_local_origin, joint3_axis, PyKDL.Joint.RotAxis), # MODIFIED
                                     f_tip_j3_to_j4))
 
         # --- Segment 4: Joint4 ---
         joint4_axis = PyKDL.Vector(0, 0, -1)
-        f_tip_j4_to_j5 = create_frame(xyz=[0.00014, 0.0002, 0.12011], rpy=[-1.5708, 0, 0])
+        f_tip_j4_to_j5 = create_frame(xyz=[0, -0.0007, 0.12011], rpy=[-1.5708, 0, 0])
         chain.addSegment(PyKDL.Segment("Link4_J4",
                                     PyKDL.Joint("Joint4", joint_local_origin, joint4_axis, PyKDL.Joint.RotAxis), # MODIFIED
                                     f_tip_j4_to_j5))
 
         # --- Segment 5: Joint5 ---
         joint5_axis = PyKDL.Vector(0, 0, -1)
-        f_tip_j5_to_j6 = create_frame(xyz=[-0.00389, -0.0592, 0.00064], rpy=[1.5708, 0, 0])
+        f_tip_j5_to_j6 = create_frame(xyz=[-0.0038938, -0.0573, 0.0008], rpy=[1.5708, 0, 0])
         chain.addSegment(PyKDL.Segment("Link5_J5",
                                     PyKDL.Joint("Joint5", joint_local_origin, joint5_axis, PyKDL.Joint.RotAxis), # MODIFIED
                                     f_tip_j5_to_j6))
 
         # --- Segment 6: Joint6 ---
         T_J6_to_GraspBase = create_frame(xyz=[0,0,0], rpy=[0,0,0])
-        T_GraspBase_to_tool0 = create_frame(xyz=[-0.0065308, -0.00063845, 0.11382], rpy=[0,0,0])
+        T_GraspBase_to_tool0 = create_frame(xyz=[0.00275, 0.0008332, 0.13779], rpy=[0,0,0])
         f_tip_j6_to_tool0 = T_J6_to_GraspBase * T_GraspBase_to_tool0
 
         joint6_axis = PyKDL.Vector(0, 0, -1)
@@ -739,7 +739,7 @@ class ArmController:
         vel_solver = PyKDL.ChainIkSolverVel_pinv(chain)
         ik_solver = PyKDL.ChainIkSolverPos_NR_JL(chain, q_min_rad, q_max_rad,
                                                 fk_solver, vel_solver,
-                                                2500, 1e-5)  # 使用固定的迭代次数和精度
+                                                2500, 0.3)  # 使用固定的迭代次数和精度
         
         # 求解
         q_out = PyKDL.JntArray(num_joints)
