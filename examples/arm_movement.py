@@ -9,7 +9,7 @@
 import os
 import sys
 import time
-import math
+from typing import List
 
 
 # 添加项目根目录到Python路径
@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from alicia_duo_sdk.controller import ArmController
 
 
-def control_move(controller, current_angles: list[float], 
-              target_angles: list[float], steps: int = 120, delay: float = 0.03) -> None:
+def control_move(controller, current_angles: List[float], 
+              target_angles: List[float], steps: int = 120, delay: float = 0.03) -> None:
         
         """缓慢移动到目标角度
         Args:
