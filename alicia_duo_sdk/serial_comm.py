@@ -26,6 +26,8 @@ class SerialComm:
         """
         self.port_name = port
         self.baudrate = baudrate
+        self.baudrate_default = 921600
+        self.baudrate_macOS = 1000000
         self.timeout = timeout
         self.debug_mode = debug_mode
         
@@ -61,6 +63,19 @@ class SerialComm:
             if self.serial_port and self.serial_port.is_open:
                 self.serial_port.close()
             
+            # 检查串口是否是cu.usbserial，该串口通常为macOS
+            if 'cu.usbserial' in port:
+                print("Found cu port")
+
+                # 检查波特率是否为macOS所能识别的
+                if self.baudrate == self.baudrate_default:
+                    self.baudrate = self.baudrate_macOS # 更改为macOS能识别的波特率1000000
+                    logger.info(f"将波特率从默认 {self.baudrate_default} 调整为macOS所能识别的 {self.baudrate_macOS}")
+
+                # 如果有指定波特率则不做更改，只log出来
+                else:
+                    logger.info(f"当前指定波特率为 {self.baudrate}, 该波特率macOS可能不能识别")
+
             # 设置串口参数
             self.serial_port = serial.Serial(
                 port=port,
@@ -126,16 +141,24 @@ class SerialComm:
             if should_log:
                 logger.warning(f"指定的端口 {self.port_name} 不可用，将搜索其他设备")
         
-        # 尝试找到可用的ttyUSB设备
+        # 尝试找到可用的设备
         for port in ports:
+            #尝试找到可用的ttyUSB设备
             if "ttyUSB" in port.device:
+                if os.access(port.device, os.R_OK | os.W_OK):
+                    if should_log:
+                        logger.info(f"找到可用设备: {port.device}")
+                    return port.device
+                
+            #尝试找到可用的cu.usbserial设备
+            elif "cu.usbserial" in port.device:
                 if os.access(port.device, os.R_OK | os.W_OK):
                     if should_log:
                         logger.info(f"找到可用设备: {port.device}")
                     return port.device
         
         if should_log:
-            logger.warning("未找到可用的ttyUSB设备")
+            logger.warning("未找到可用的ttyUSB或者cu.usbserial设备")
         return ""
     
     def send_data(self, data: List[int]) -> bool:
@@ -208,9 +231,8 @@ class SerialComm:
                 byte_data = self.serial_port.read(1)
                 if not byte_data:
                     continue
-                    
+    
                 byte_val = byte_data[0]
-                
                 if not start_found:
                     # 寻找起始标记
                     if byte_val == 0xAA:
@@ -252,6 +274,8 @@ class SerialComm:
             logger.error(f"读取数据异常: {str(e)}")
             return 9999999
     
+        
+
     def _serial_data_check(self, data: List[int]) -> bool:
         """
         验证数据的校验和
