@@ -311,26 +311,3 @@ class SerialComm:
         hex_str = " ".join([f"{byte:02X}" for byte in data])
         logger.info(f"{prefix}{hex_str}")
 
-    # def _print_hex_frame(self, data: List[int], type_code: int):
-    #     """
-    #     打印十六进制数据
-        
-    #     Args:
-    #         data: 数据帧
-    #         type_code: 0=发送数据, 1=接收数据, 其他=部分数据
-    #     """
-    #     if not self.debug_mode:
-    #         return
-        
-    #     # 只打印以AA 02开头的数据帧
-    #     if len(data) < 2 or data[0] != 0xAA or data[1] != 0x02:
-    #         return
-        
-    #     prefix = {
-    #         0: "发送数据: ",
-    #         1: "数据接收: ",
-    #         2: "部分数据: "
-    #     }.get(type_code, "未知数据: ")
-        
-    #     hex_str = " ".join([f"{byte:02X}" for byte in data])
-    #     logger.info(f"{prefix}{hex_str}")
