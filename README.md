@@ -1,6 +1,6 @@
-# Alicia Duo SDK
+# Alicia-D SDK  
 
-Alicia Duo SDK 是一个用于控制 Alicia Duo 六轴机械臂（带夹爪）的 Python 工具包。它提供了通过串口与机械臂通信、控制关节运动、操作夹爪以及读取状态信息的功能。
+Alicia-D SDK 是一个用于控制 【灵动 Alicia-D】 系列六轴机械臂（带夹爪）的 Python 工具包。它提供了通过串口与机械臂通信、控制关节运动、操作夹爪以及读取状态信息的功能。
 
 ## 主要特性
 
