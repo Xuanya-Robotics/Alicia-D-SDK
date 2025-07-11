@@ -12,8 +12,8 @@
 1.  **克隆或下载 SDK**
     如果您拥有 Git，可以克隆此仓库：
     ```bash
-    git clone https://github.com/Xianova-Robotics/Alicia_duo_sdk.git
-    cd Alicia_duo_sdk
+    git clone https://github.com/Xuanya-Robotics/Alicia-D-SDK.git
+    cd Alicia-D-SDK
     ```
     或者，您可以下载 SDK 的压缩包并解压到您的本地计算机。
 
