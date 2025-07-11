@@ -35,12 +35,12 @@ def get_version():
 setup(
     name='alicia-duo-sdk',
     version=get_version(),
-    author='Your Name / Organization', # 请替换为您的名称或组织
-    author_email='your.email@example.com', # 请替换为您的邮箱
+    author='Xuanya Robotics',
+    author_email='tech@xuanyatech.com', 
     description='Python SDK for controlling the Alicia Duo robotic arm',
     long_description=read_readme(),
     long_description_content_type='text/markdown',
-    url='https://github.com/yourusername/Alicia_duo_sdk', # 请替换为您的仓库URL
+    url='https://github.com/Xuanya-Robotics/Alicia-D-SDK', # 请替换为您的仓库URL
     packages=find_packages(exclude=['tests*', 'examples*']), # 自动查找 alicia_duo_sdk 包
     install_requires=read_requirements(),
     classifiers=[
@@ -62,9 +62,4 @@ setup(
     ],
     python_requires='>=3.6',
     keywords='robotic arm, alicia duo, sdk, serial communication, robotics',
-    project_urls={ # 可选
-        'Documentation': 'https://github.com/yourusername/Alicia_duo_sdk/tree/main/docs',
-        'Source': 'https://github.com/yourusername/Alicia_duo_sdk',
-        'Tracker': 'https://github.com/yourusername/Alicia_duo_sdk/issues',
-    },
 )
