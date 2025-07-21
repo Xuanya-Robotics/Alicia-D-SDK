@@ -6,9 +6,9 @@
 
 1.  确保您已经按照 [安装指南](installation.md) 完成了 SDK 的安装和硬件连接。
 2.  打开终端或命令提示符。
-3.  导航到 `Alicia_duo_sdk/examples/` 目录。
+3.  导航到 `Alicia-D-SDK/examples/` 目录。
     ```bash
-    cd path/to/Alicia_duo_sdk/examples
+    cd path/to/Alicia-D-SDK/examples
     ```
 4.  使用 Python 3 运行所需的示例脚本：
     ```bash
