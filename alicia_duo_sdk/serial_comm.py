@@ -109,15 +109,6 @@ class SerialComm:
         # 记录当前时间，避免过频繁打印日志
         current_time = time.time()
         should_log = (current_time - self.last_log_time) >= 5.0  # 每5秒允许打印一次日志
-        
-        # 首先尝试使用指定的端口
-        if self.port_name:
-            if os.access(self.port_name, os.R_OK | os.W_OK):
-                logger.info(f"使用指定的端口: {self.port_name}")
-                return self.port_name
-            else:
-                logger.warning(f"指定的端口 {self.port_name} 不可用，将搜索其他设备")
-        
 
         # 获取串口列表
         try:
@@ -137,6 +128,14 @@ class SerialComm:
         # 如果没有端口
         if not ports:
             return ""
+        
+        # 首先尝试使用指定的端口
+        if self.port_name:
+            if os.access(self.port_name, os.R_OK | os.W_OK):
+                logger.info(f"使用指定的端口: {self.port_name}")
+                return self.port_name
+            else:
+                logger.warning(f"指定的端口 {self.port_name} 不可用，将搜索其他设备")
         
 
         # 尝试找到可用的设备
