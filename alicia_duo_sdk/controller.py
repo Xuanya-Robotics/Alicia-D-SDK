@@ -303,10 +303,14 @@ class ArmController:
         """
         # 构造夹爪控制帧
         frame = self._build_gripper_frame(angle_rad)
-        
-        # 发送夹爪控制命令
-        result = self.serial_comm.send_data(frame)
-        
+        # 最多发送两次
+        for i in range(2):
+            result = self.serial_comm.send_data(frame)
+
+        if not result:
+            logger.warning("夹爪指令发送失败")
+            return False
+   
         # 如果需要等待夹爪运动完成
         if wait_for_completion and result:
             if self.debug_mode:
@@ -525,11 +529,11 @@ class ArmController:
             logger.warning(f"夹爪角度值超出范围: {angle_deg:.2f}度，会被截断")
             angle_deg = 100.0
         
-        # 转换公式：0度对应2048，100度对应2900
-        value = int(2048 + (angle_deg * 8.52))
+        # 转换公式：0度对应2048，100度对应3290
+        value = int(2048 + (angle_deg * 12.42))
         
         # 范围限制
-        return max(2048, min(2900, value))
+        return max(2048, min(3290, value))
     
     def _calculate_checksum(self, frame: List[int]) -> int:
         """
