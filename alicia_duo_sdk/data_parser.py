@@ -2,6 +2,8 @@ import math
 import time
 import logging
 from typing import List, Dict, Tuple, Optional, Union, NamedTuple
+import threading
+import copy
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, 
@@ -30,8 +32,11 @@ class DataParser:
     CMD_MULTI_ARM = 0x06   # 四机械臂角度反馈与控制
     CMD_TORQUE = 0x13      # 机械臂力矩控制
     CMD_ERROR = 0xEE       # 错误反馈
+
+    # 数据长度
+    JOINT_DATA_SIZE = 18
     
-    def __init__(self, debug_mode: bool = False):
+    def __init__(self, lock: threading.Lock, debug_mode: bool = False):
         """
         初始化数据解析器
         
@@ -41,12 +46,10 @@ class DataParser:
         self.debug_mode = debug_mode
         
         # 存储最新数据
-        self._joint_angles = [0.0] * 6  # 六个关节角度(弧度)
-        self._gripper_angle = 0.0       # 夹爪角度(弧度)
-        self._button1 = False           # 按钮1状态
-        self._button2 = False           # 按钮2状态
-        self._last_update_time = 0.0    # 最后更新时间
-        
+        self._joint_states = JointState([0.0]*6, 0.0, 0.0,
+                                        False, False)  # 六个关节角度(弧度)
+
+        self._lock = lock
         logger.info("初始化数据解析模块")
         if debug_mode:
             logger.info("调试模式: 启用")
@@ -102,14 +105,29 @@ class DataParser:
         Returns:
             JointState: 当前关节状态
         """
-        return JointState(
-            angles=self._joint_angles,
-            gripper=self._gripper_angle,
-            timestamp=self._last_update_time,
-            button1=self._button1,
-            button2=self._button2
-        )
-    
+        with self._lock:
+            js = self._joint_states
+            if js.angles is None or js.timestamp is None:
+                logger.warning(f"机械臂状态尚未更新")
+                return None
+            return copy.deepcopy(self._joint_states)
+        
+    def _update_joint_state(self,
+                        angles: Optional[List[float]] = None,
+                        gripper: Optional[float] = None,
+                        button1: Optional[bool] = None,
+                        button2: Optional[bool] = None):
+        with self._lock:
+            prev = self._joint_states
+            self._joint_states = JointState(
+                angles=angles if angles is not None else prev.angles,
+                gripper=gripper if gripper is not None else prev.gripper,
+                timestamp=time.time(),
+                button1=button1 if button1 is not None else prev.button1,
+                button2=button2 if button2 is not None else prev.button2,
+            )
+
+
     def _parse_joint_data(self, frame: List[int]) -> Dict:
         """
         解析关节数据帧 (0x04)
@@ -121,7 +139,7 @@ class DataParser:
             Dict: 解析结果
         """
         # 检查数据长度
-        if frame[2] != 18:  # 0x12对应十进制18 (9个舵机 * 2字节)
+        if frame[2] != self.JOINT_DATA_SIZE:  # 0x12对应十进制18 (9个舵机 * 2字节)
             logger.warning(f"关节数据长度错误: {frame[2]}")
             return None
         
@@ -165,8 +183,7 @@ class DataParser:
                 joint_values[joint_idx] = angle_rad
         
         # 更新存储的数据
-        self._joint_angles = joint_values
-        self._last_update_time = time.time()
+        self._update_joint_state(angles=joint_values)
         
         if self.debug_mode:
             degrees = [round(rad * self.RAD_TO_DEG, 2) for rad in joint_values]
@@ -174,9 +191,9 @@ class DataParser:
         
         return {
             "type": "joint_data",
-            "angles": joint_values,
+            "angles": self._joint_states.angles,
             "servo_values": servo_values,
-            "timestamp": self._last_update_time
+            "timestamp": self._joint_states.timestamp
         }
 
     def _value_to_radians(self, value: int) -> float:
@@ -236,22 +253,21 @@ class DataParser:
             gripper_raw = frame[4] | (frame[5] << 8)
         # print("gripper_raw", gripper_raw)
         # 范围检查
-        if gripper_raw < 2048 or gripper_raw > 2900:
-            gripper_raw = max(2048, min(gripper_raw, 2900))
+        servo_value_limit = 3290
+
+        if gripper_raw < 2048 or gripper_raw > servo_value_limit:
+            gripper_raw = max(2048, min(gripper_raw, servo_value_limit))
         
         # 转换为角度 (0-100度)
-        angle_deg = (gripper_raw - 2048) / 8.52
+        ratio = (servo_value_limit - 2048) / 100
+        angle_deg = (gripper_raw - 2048) / ratio
         
         # 转换为弧度
         gripper_rad = angle_deg * self.DEG_TO_RAD
         
-
-        
         # 更新存储的数据
-        self._gripper_angle = gripper_rad
-        self._button1 = button1
-        self._button2 = button2
-        self._last_update_time = time.time()
+        self._update_joint_state(gripper=gripper_rad, button1=button1,
+                                 button2=button2)
         
         if self.debug_mode:
             logger.debug(f"夹爪原始值: {gripper_raw}, 角度: {angle_deg:.2f}度, 弧度: {gripper_rad:.4f}")
@@ -259,10 +275,10 @@ class DataParser:
         
         return {
             "type": "gripper_data",
-            "gripper_angle": gripper_rad,
-            "button1": button1,
-            "button2": button2,
-            "timestamp": self._last_update_time
+            "gripper_angle": self._joint_states.gripper,
+            "button1": self._joint_states.button1,
+            "button2": self._joint_states.button2,
+            "timestamp": self._joint_states.timestamp
         }
     
     def _parse_error_data(self, frame: List[int]) -> Dict:

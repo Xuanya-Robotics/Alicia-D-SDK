@@ -24,6 +24,9 @@ class ArmController:
     # 帧常量
     FRAME_HEADER = 0xAA
     FRAME_FOOTER = 0xFF
+    FRAME_MINIMAL_SIZE = 5
+    ARM_DATA_SIZE = 18
+    GRIPPER_FRAME_SIZE = 8
     
     # 指令ID
     CMD_GRIPPER = 0x02     # 夹爪控制与行程反馈
@@ -42,10 +45,10 @@ class ArmController:
             debug_mode: 是否启用调试模式
         """
         self.debug_mode = debug_mode
-        
+        self._lock = threading.Lock()
         # 创建串口通信模块和数据解析器
-        self.serial_comm = SerialComm(port=port, baudrate=baudrate, debug_mode=debug_mode)
-        self.data_parser = DataParser(debug_mode=debug_mode)
+        self.serial_comm = SerialComm(lock=self._lock, port=port, baudrate=baudrate, debug_mode=debug_mode)
+        self.data_parser = DataParser(lock=self._lock, debug_mode=debug_mode)
         
         # 舵机数量
         self.servo_count = 9
@@ -68,6 +71,7 @@ class ArmController:
         
         # 状态更新线程相关
         self._update_thread = None
+        self.thread_update_interval = 0.005  # 更新间隔，单位：秒
         self._stop_thread = threading.Event()
         self._thread_running = False
 
@@ -77,6 +81,26 @@ class ArmController:
         logger.info(f"调试模式: {'启用' if debug_mode else '禁用'}")
 
         self.disconnect()
+    
+    def wait_for_valid_state(self, timeout: float = 5.0) -> bool:
+        """
+        等待指定机械臂的状态变为有效（不为全零）
+
+        Args:
+            arm (str): "left_arm"、"right_arm" 或 "both"
+            timeout (float): 最大等待时间（秒）
+
+        Returns:
+            bool: 如果在超时时间内收到有效状态，返回 True；否则返回 False
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            js = self.read_joint_state()
+            if js and max(abs(a) for a in js.angles) > 1e-3:
+                return True
+            time.sleep(0.05)
+        print(f"[超时] 未收到有效关节状态")
+        return False
 
     def __del__(self):
         """析构函数，确保线程和连接在对象销毁时被正确清理"""
@@ -100,6 +124,7 @@ class ArmController:
         if result:
             # 连接成功后启动状态更新线程
             self.start_update_thread()
+            self.wait_for_valid_state()
         return result
     
     def disconnect(self):
@@ -165,27 +190,21 @@ class ArmController:
     
     def _update_loop(self):
         """状态更新线程主循环"""
-        update_interval = 0.01  # 更新间隔，单位：秒
-        error_count = 0
-        max_consecutive_errors = 10
-        
         logger.info("状态更新线程开始运行")
         
         while not self._stop_thread.is_set():
+            time.sleep(self.thread_update_interval)
             try:
-                # 读取一帧数据
-                frame = self.serial_comm.read_frame()
+                with self._lock:
+                    # 读取一帧数据
+                    frame = self.serial_comm.read_frame()
+                if frame == 9999999:
+                    logger.error("检测到严重的串口通信异常，机械臂可能已断开连接")
+                    break
                 if frame:
                     # 解析数据帧，更新内部状态
                     self.data_parser.parse_frame(frame)
-                    # 成功读取帧后重置错误计数
-
-                if frame == 9999999:
-                    #logger.error("检测到严重的串口通信异常，机械臂可能已断开连接")
-                    # 停止线程并清理资源
-                    #self._destroy_self("机械臂连接已丢失")
-                    break  # 确保线程退出循环
-                    
+        
             except Exception as e:
                 logger.error(f"状态更新线程异常: {str(e)}")
                 
@@ -304,6 +323,7 @@ class ArmController:
         # 构造夹爪控制帧
         frame = self._build_gripper_frame(angle_rad)
         # 最多发送两次
+        
         for i in range(2):
             result = self.serial_comm.send_data(frame)
 
@@ -388,13 +408,13 @@ class ArmController:
             List[int]: 控制帧字节列表
         """
         # 计算帧大小：帧头(1)+命令(1)+长度(1)+数据(舵机数*2)+校验(1)+帧尾(1)
-        frame_size = self.servo_count * 2 + 5
+        frame_size = self.FRAME_MINIMAL_SIZE + self.ARM_DATA_SIZE
         
         # 创建帧
         frame = [0] * frame_size
         frame[0] = self.FRAME_HEADER
         frame[1] = self.CMD_JOINT
-        frame[2] = self.servo_count * 2  # 数据长度
+        frame[2] = self.ARM_DATA_SIZE  # 数据长度
         frame[-1] = self.FRAME_FOOTER
         
         # 映射关节角度到各个舵机
@@ -429,7 +449,7 @@ class ArmController:
             List[int]: 控制帧字节列表
         """
         # 创建夹爪控制帧 (固定长度)
-        frame = [0] * 8
+        frame = [0] * self.GRIPPER_FRAME_SIZE
         frame[0] = self.FRAME_HEADER
         frame[1] = self.CMD_GRIPPER
         frame[2] = 3  # 数据长度
@@ -528,12 +548,14 @@ class ArmController:
         elif angle_deg > 100.0:
             logger.warning(f"夹爪角度值超出范围: {angle_deg:.2f}度，会被截断")
             angle_deg = 100.0
-        
-        # 转换公式：0度对应2048，100度对应3290
-        value = int(2048 + (angle_deg * 12.42))
+
+        servo_value_limit = 3290
+        # 转换公式：0度对应2048，100度对应servo_value_limit 
+        ratio = (servo_value_limit - 2048) / 100
+        value = int(2048 + (angle_deg * ratio))
         
         # 范围限制
-        return max(2048, min(3290, value))
+        return max(2048, min(servo_value_limit, value))
     
     def _calculate_checksum(self, frame: List[int]) -> int:
         """

@@ -17,6 +17,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from alicia_duo_sdk.controller import ArmController
 
+def ease_in_out_cubic(x: float) -> float:
+    return 4 * x**3 if x < 0.5 else 1 - pow(-2 * x + 2, 3) / 2
 
 def control_move(controller, current_angles: List[float], 
               target_angles: List[float], steps: int = 120, delay: float = 0.03) -> None:
@@ -35,8 +37,9 @@ def control_move(controller, current_angles: List[float],
             raise ValueError(f"错误: 当前角度数量是：{len(current_angles)} 与目标角度数量：{len(target_angles)} 数量不匹配")
                 
         for step in range(1, steps + 1):
+            ratio = ease_in_out_cubic(step / steps)
             interp_angles = [
-                current + (target - current) * step / steps
+                current + (target - current) * ratio
                 for current, target in zip(current_angles, target_angles)
             ]
             result = controller.set_joint_angles(interp_angles, wait_for_completion=False)

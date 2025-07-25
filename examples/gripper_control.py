@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+50#!/usr/bin/env python3
 # coding=utf-8
 
 """
@@ -16,6 +16,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from alicia_duo_sdk.controller import ArmController
 
+def wait_for_valid_state(controller: ArmController, timeout: float=5.0):
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        js = controller.read_joint_state()
+        if js and max(abs(a) for a in js.angles) > 1e-3:
+            return True
+        time.sleep(0.05)
+    print(f"超时：未收到机械臂状态数据")
+    return False
+
 def main():
     """主函数"""
     print("=== 机械臂夹爪控制示例 ===")
@@ -28,7 +38,8 @@ def main():
         if not controller.connect():
             print("无法连接到机械臂，请检查连接")
             return
-            
+
+        wait_for_valid_state(controller)  
         print("连接成功")
         print("\n测试夹爪功能:")
         

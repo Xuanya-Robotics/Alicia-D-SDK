@@ -4,16 +4,19 @@ import time
 import logging
 import os
 from typing import List, Optional, Tuple
+import threading
+from datetime import datetime
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("SerialComm")
-
+READ_LENGTH = 50
+DEFAULT_LENGTH = 5
 class SerialComm:
     """机械臂串口通信模块 - 简化版"""
     
-    def __init__(self, port: str = "", baudrate: int = 921600, 
+    def __init__(self, lock: threading.Lock, port: str = "", baudrate: int = 921600, 
                 timeout: float = 1.0, debug_mode: bool = False):
         """
         初始化串口通信模块
@@ -33,7 +36,10 @@ class SerialComm:
         
         self.serial_port = None
         self.last_log_time = 0
-        
+        self._last_print_time = 0
+
+        self._lock = lock
+        self._rx_buffer = bytearray()
         logger.info(f"初始化串口通信模块: 端口={port or '自动'}, 波特率={baudrate}")
         logger.info(f"调试模式: {'启用' if debug_mode else '禁用'}")
     
@@ -65,7 +71,6 @@ class SerialComm:
             
             # 检查串口是否是cu.usbserial，该串口通常为macOS
             if 'cu.usbserial' in port:
-                print("Found cu port")
 
                 # 检查波特率是否为macOS所能识别的
                 if self.baudrate == self.baudrate_default:
@@ -131,13 +136,16 @@ class SerialComm:
         
         # 首先尝试使用指定的端口
         if self.port_name:
-            if os.access(self.port_name, os.R_OK | os.W_OK):
-                logger.info(f"使用指定的端口: {self.port_name}")
-                return self.port_name
-            else:
+            for port in ports:
+                if self.port_name in port.device:
+                    if os.access(port.device, os.R_OK | os.W_OK):
+                        if should_log:
+                            logger.info(f"使用指定的端口: {port.device}")
+                        return port.device
+            
+            if should_log:
                 logger.warning(f"指定的端口 {self.port_name} 不可用，将搜索其他设备")
         
-
         # 尝试找到可用的设备
         for port in ports:
             #尝试找到可用的ttyUSB设备
@@ -153,7 +161,13 @@ class SerialComm:
                     if should_log:
                         logger.info(f"找到可用设备: {port.device}")
                     return port.device
-        
+           
+            #尝试找到可用的COM设备
+            elif "COM" in port.device:
+                if os.access(port.device, os.R_OK | os.W_OK):
+                    if should_log:
+                        logger.info(f"找到可用设备: {port.device}")
+                    return port.device
         if should_log:
             logger.warning("未找到可用的ttyUSB或者cu.usbserial设备")
         return ""
@@ -168,31 +182,32 @@ class SerialComm:
         Returns:
             bool: 是否发送成功
         """
-        try:
-            if not self.serial_port or not self.serial_port.is_open:
-                logger.warning("串口未打开，尝试重新连接")
-                if not self.connect():
-                    logger.error("无法连接到串口")
+        with self._lock:
+            try:
+                if not self.serial_port or not self.serial_port.is_open:
+                    logger.warning("串口未打开，尝试重新连接")
+                    if not self.connect():
+                        logger.error("无法连接到串口")
+                        return False
+                
+                # 转换为字节数组
+                data_bytes = bytes(data)
+                
+                # 写入数据
+                bytes_written = self.serial_port.write(data_bytes)
+                
+                if bytes_written != len(data):
+                    logger.warning(f"只写入了 {bytes_written} 字节，应为 {len(data)} 字节")
                     return False
-            
-            # 转换为字节数组
-            data_bytes = bytes(data)
-            
-            # 写入数据
-            bytes_written = self.serial_port.write(data_bytes)
-            
-            if bytes_written != len(data):
-                logger.warning(f"只写入了 {bytes_written} 字节，应为 {len(data)} 字节")
+                
+                if self.debug_mode:
+                    self._print_hex_frame(data, 0)
+    
+                return True
+                    
+            except Exception as e:
+                logger.error(f"发送数据时异常: {str(e)}")
                 return False
-            
-            if self.debug_mode:
-                self._print_hex_frame(data, 0)
-                
-            return True
-                
-        except Exception as e:
-            logger.error(f"发送数据时异常: {str(e)}")
-            return False
     
     def read_frame(self) -> Optional[List[int]]:
         """
@@ -210,70 +225,54 @@ class SerialComm:
             if self.serial_port.in_waiting == 0:
                 return None
             
-            # 寻找帧起始标记 0xAA
-            frame_buffer = []
-            start_found = False
-            
-            # 设置一个安全的最大读取次数，避免无限循环
-            max_attempts = 100
-            attempts = 0
-            
-            while attempts < max_attempts:
-                attempts += 1
-                
-                if self.serial_port.in_waiting == 0:
-                    # 没有更多数据可读
-                    break
-                
-                byte_data = self.serial_port.read(1)
-                if not byte_data:
+            # 导入串口缓存数据
+            self._rx_buffer += self.serial_port.read(self.serial_port.in_waiting)
+
+            while len(self._rx_buffer) >= READ_LENGTH:
+                # Step 1: 同步到帧头 0xAA
+                if self._rx_buffer[0] != 0xAA:
+                    self._rx_buffer.pop(0)
                     continue
-    
-                byte_val = byte_data[0]
-                if not start_found:
-                    # 寻找起始标记
-                    if byte_val == 0xAA:
-                        frame_buffer = [byte_val]
-                        start_found = True
-                else:
-                    # 构建帧
-                    frame_buffer.append(byte_val)
-                    
-                    # 检查是否找到帧结束标记
-                    if byte_val == 0xFF and len(frame_buffer) >= 3:
-                        # 检查帧长度是否符合预期
-                        if len(frame_buffer) >= 3:  # 确保有足够的数据读取长度字段
-                            expected_length = frame_buffer[2] + 5  # 数据长度+5等于帧长度
-                            
-                            if len(frame_buffer) == expected_length:
-                                # 验证校验和
-                                if self._serial_data_check(frame_buffer):
-                                    if self.debug_mode:
-                                        self._print_hex_frame(frame_buffer, 1)
-                                    return frame_buffer
-                                else:
-                                    logger.warning("帧校验和验证失败")
-                                    start_found = False
-                            elif expected_length > 64 or len(frame_buffer) > 64:
-                                # 帧太长，认为帧错误
-                                logger.warning("帧太长，丢弃")
-                                start_found = False
+
+                frame_length = self._rx_buffer[2] + DEFAULT_LENGTH       # 数据长度 + 基础长度
+                candidate = self._rx_buffer[:frame_length]
+
+                # Step 2: 验证帧尾和校验
+                valid_tail = candidate[-1] == 0xFF
+                valid_checksum = self._serial_data_check(candidate)
+
+                parsed = {
+                "timestamp": datetime.now().isoformat(),
+                "raw": ' '.join(f"{b:02X}" for b in candidate),
+                "raw_decimal": list(candidate),
+                "valid": valid_tail and valid_checksum
+            }
             
-            # 如果找到了起始标记但没有完成帧，保留给下次读取
-            if start_found and frame_buffer:
-                logger.debug(f"读取到部分帧，长度: {len(frame_buffer)}")
                 if self.debug_mode:
-                    self._print_hex_frame(frame_buffer, 2)  # 输出部分帧
-            
-            return None
+                    now = time.time()
+                    if self.debug_mode and now - self._last_print_time > 1.0:
+                        logger.info(f"[Frame] {parsed['raw_decimal']} {'(OK)' if parsed['valid'] else '(Invalid)'}")
+                        self._last_print_time = now
+
+                self._rx_buffer = self._rx_buffer[frame_length:]
+
+                 # Step 4: 若缓存过大，强制同步（防炸）
+                if len(self._rx_buffer) > 1000:
+                    aa_index = self._rx_buffer.find(0xAA)
+                    if aa_index == -1:
+                        self._rx_buffer.clear()
+                    else:
+                        self._rx_buffer = self._rx_buffer[aa_index:]
+
+                if parsed["valid"]:
+                    self._rx_buffer.clear()
+                    return candidate    
                 
         except Exception as e:
             logger.error(f"读取数据异常: {str(e)}")
             return 9999999
     
-        
-
-    def _serial_data_check(self, data: List[int]) -> bool:
+    def _serial_data_check(self, frame: bytearray) -> bool:
         """
         验证数据的校验和
         
@@ -283,15 +282,15 @@ class SerialComm:
         Returns:
             bool: 校验是否通过
         """
-        if len(data) < 4:
+        data_len = frame[2]
+        if len(frame) != data_len + DEFAULT_LENGTH:
             return False
-        
-        calculated_check = self._sum_elements(data) % 2
-        received_check = data[-2]  # 倒数第二个字节
-        
-        return calculated_check == received_check
+
+        payload = frame[3:3 + data_len]
+        checksum = frame[3 + data_len]
+        return checksum == self._calculate_checksum(payload)
     
-    def _sum_elements(self, data: List[int]) -> int:
+    def _calculate_checksum(self,data) -> int:
         """
         计算数据的校验和
         
@@ -301,15 +300,9 @@ class SerialComm:
         Returns:
             int: 校验和
         """
-        if len(data) < 4:
-            logger.error("数据数组太小，无法计算校验和")
-            return 0
-        
-        # 计算从第3个字节到倒数第2个字节之前的所有元素的和
         sum_value = 0
-        for i in range(3, len(data) - 2):
+        for i in range(len(data)):
             sum_value += data[i]
-        
         return sum_value % 2
     
     def _print_hex_frame(self, data: List[int], type_code: int):
