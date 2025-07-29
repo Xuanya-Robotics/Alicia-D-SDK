@@ -213,7 +213,7 @@ class ArmController:
         self._thread_running = False
         logger.info("状态更新线程已结束运行")
     
-    def read_joint_angles(self) -> Optional[List[float]]:
+    def get_joint_angles(self) -> Optional[List[float]]:
         """
         读取关节角度（弧度）
         
@@ -243,7 +243,7 @@ class ArmController:
         # 直接返回当前状态，不需要额外读取数据
         return self.data_parser.get_joint_state()
     
-    def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None, wait_for_completion: bool = True, timeout: float = 5.0, tolerance: float = 0.08) -> bool:
+    def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None, timeout: float = 5.0, tolerance: float = 0.08) -> bool:
         """
         设置关节角度（弧度）
         
@@ -273,37 +273,6 @@ class ArmController:
         if gripper_angle is not None and result:
             #time.sleep(0.02)  # 短暂延时，避免连续发送导致丢包
             result = self.set_gripper(gripper_angle)
-        
-        # 如果需要等待运动完成
-        #print(f"wait_for_completion: {wait_for_completion}, result: {result}")
-        if wait_for_completion and result:
-            logger.info("等待机械臂运动完成")
-            start_time = time.time()
-            while time.time() - start_time < timeout:
-                # 读取当前关节状态 - 因为有后台线程更新，所以直接获取最新状态
-                current_state = self.data_parser.get_joint_state()
-                current_angles = current_state.angles
-                
-                # 检查是否到达目标位置
-                reached = True
-                for i in range(self.joint_count):
-                    if abs(current_angles[i] - joint_angles[i]) > tolerance:
-                        reached = False
-                        break
-                
-                # 如果到达目标位置，退出循环
-                if reached:
-                    if self.debug_mode:
-                        logger.debug("机械臂到达目标位置")
-                    break
-                
-                # 短暂延时，避免过于频繁检查
-                time.sleep(0.02)
-            
-            # 检查是否超时
-            if time.time() - start_time >= timeout:
-                logger.warning("等待机械臂运动完成超时")
-                return False
             
         return result
     
@@ -382,7 +351,12 @@ class ArmController:
         frame = self._build_command_frame(self.CMD_TORQUE, [0x01])
         
         # 发送力矩使能命令
-        return self.serial_comm.send_data(frame)
+        result = self.serial_comm.send_data(frame)
+        time.sleep(1)
+        
+        if result:
+            logger.info("扭矩已开启")
+        return result
     
     def disable_torque(self) -> bool:
         """
@@ -394,8 +368,14 @@ class ArmController:
         # 构造力矩禁用帧
         frame = self._build_command_frame(self.CMD_TORQUE, [0x00])
         
-        # 发送力矩禁用命令
-        return self.serial_comm.send_data(frame)
+        # 发送力矩使能命令
+        result = self.serial_comm.send_data(frame)
+        time.sleep(1)
+        
+        if result:
+            logger.info("扭矩已关闭")
+        return result
+    
     
     def _build_joint_frame(self, joint_angles: List[float]) -> List[int]:
         """

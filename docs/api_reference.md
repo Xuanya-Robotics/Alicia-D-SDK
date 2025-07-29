@@ -47,7 +47,7 @@ from alicia_duo_sdk.controller import ArmController
 
 ### 读取数据
 
-*   `read_joint_angles(self) -> Optional[List[float]]`
+*   `get_joint_angles(self) -> Optional[List[float]]`
     读取机械臂六个关节的当前角度。
     此方法会尝试读取新的数据帧，如果成功且为关节数据，则解析并返回最新角度。如果未能读取到新的关节数据，则返回上一次已知的关节角度。
     *   **返回**: `Optional[List[float]]` - 包含六个关节角度（单位：弧度）的列表。如果无法获取状态（例如，在初始连接且未收到任何数据之前），理论上可能返回基于内部默认值的状态，但通常在连接后很快就会有实际数据。

@@ -23,7 +23,7 @@ def main():
     print("=== Alicia-D调零示例 ===")
     
     parser = argparse.ArgumentParser(description="调零示例")
-    parser.add_argument('--follower', type=bool, default=False,
+    parser.add_argument('--follower', type=bool, default=True,
                        help='是否为操作臂调零 (True/False, 默认: False)')
     # 创建控制器实例 (可选参数: port="/dev/ttyUSB0", debug_mode=True)
     args = parser.parse_args()
@@ -42,7 +42,7 @@ def main():
         print("-" * 50)
         if arm_type == "follower":
             print("操作臂调零前需进入无力矩状态导致无法维持当前状态，请确保安全")
-            print("按 Enter 键开始...")
+            input("按 Enter 键开始...")
             controller.disable_torque()
             try:
                 input("准备好后请按 Enter 键开始操作臂调零...")
