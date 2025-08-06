@@ -1,0 +1,8 @@
+nbData: 200
+nbVarPos: 7
+nbDeriv: 2
+nbPoints: 2
+nbVar: 14
+nbVarX: 15
+dt: 1E-2
+rfactor: 1E-6

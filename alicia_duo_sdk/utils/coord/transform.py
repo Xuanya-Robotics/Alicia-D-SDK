@@ -25,3 +25,14 @@ def matrix_to_quaternion(matrix):
     """旋转矩阵转四元数 (x, y, z, w)"""
     r = R.from_matrix(matrix)
     return r.as_quat()
+
+def quaternion_to_matrix(quat: list) -> np.ndarray:
+    """
+    将四元数 [qx, qy, qz, qw] 转换为 3x3 旋转矩阵
+    Args:
+        quat: List[float] of length 4
+    Returns:
+        np.ndarray: shape (3, 3)
+    """
+    r = R.from_quat([quat[0], quat[1], quat[2], quat[3]])
+    return r.as_matrix()

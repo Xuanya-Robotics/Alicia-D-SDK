@@ -1,4 +1,4 @@
-from .controller import ArmController
+from .servo_driver import ArmController
 from .data_parser import JointState
 
 __all__ = [

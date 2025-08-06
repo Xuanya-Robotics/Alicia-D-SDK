@@ -1,12 +1,14 @@
 # controller/session_factory.py
 
-from ..motor.controller import ArmController
+from ..driver.servo_driver import ArmController
 from ..kinematics import RobotArm, IKController
 from .motion_session import MotionSession
-import time
+from ..utils.logger import BeautyLogger
+
+logger = BeautyLogger(log_dir="./logs", log_name="session.log", verbose=True)
 
 def get_default_session(
-    port: str = "",
+    port: str = '',        
     baudrate: int = 921600,
     debug: bool = False,
     connect_timeout: float = 5.0
@@ -23,22 +25,22 @@ def get_default_session(
     Returns:
         MotionSession: 构建完成的控制上下文
     """
-    print("[SDK] 初始化 RobotArm 模型...")
+    logger.module("[session]开始构建默认会话")
+    logger.info("[session]]初始化 RobotArm 模型...")
     robot_model = RobotArm()
 
-    print("[SDK] 初始化 IK 控制器...")
+    logger.info("[session]初始化 IK 控制器...")
     ik_controller = IKController(robot_model)
 
-    print(f"[SDK] 初始化机械臂控制器 (port='{port}', baudrate={baudrate})...")
+    logger.info(f"[session]初始化机械臂控制器 (port='{port}', baudrate={baudrate})")
     joint_controller = ArmController(port=port, baudrate=baudrate, debug_mode=debug)
 
-    print("[SDK] 正在连接机械臂...")
+    logger.info("[session]正在连接机械臂")
     if not joint_controller.connect():
+        logger.warning("[session]会话建立失败")
         raise RuntimeError("连接机械臂失败，请检查串口连接")
 
-    print("[SDK] 等待机械臂状态初始化...")
-    if not joint_controller.wait_for_valid_state(timeout=connect_timeout):
-        raise RuntimeError("机械臂状态初始化失败，请检查是否已上电")
-
-    print("[SDK] 运动控制上下文构建成功 ✅")
-    return MotionSession(ik_controller, robot_model, joint_controller)
+    logger.info("会话创建成功")
+    return MotionSession(ik_controller=ik_controller,
+                          robot_model=robot_model, 
+                          joint_controller=joint_controller)
