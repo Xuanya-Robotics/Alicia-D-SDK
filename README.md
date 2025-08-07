@@ -17,13 +17,13 @@ Alicia-D SDK 是一个用于控制【灵动 Alicia-D】系列六轴机械臂（�
 
 ```
 alicia_duo_sdk/
-├── config/
-├── controller/
-├── driver/
-├── execution/
-├── kinematics/
-├── planning/
-├── utils/
+├── config/ 
+├── controller/     # 上层控制 API，统一封装运动指令和会话管理
+├── driver/         # 底层串口通信与数据解析模块
+├── execution/      # 轨迹执行器，支持插值控制和可视化
+├── kinematics/     # 运动学求解器（正向 / 逆向）
+├── planning/       # 插值规划模块，支持 LQT / 线性等方式
+├── utils/          # 辅助工具，如日志记录、验证器等
 docs/
 ├── api_reference.md
 ├── examples.md
