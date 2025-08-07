@@ -1,57 +1,55 @@
-from typing import List, Tuple
+from typing import List, Union
 import numpy as np
 from scipy.spatial.transform import Rotation as R, Slerp
-from alicia_duo_sdk.kinematics import IKController, RobotArm
+from alicia_duo_sdk.kinematics import AliciaFollower
 from ...utils.logger import BeautyLogger
+import time
 
-logger = BeautyLogger(log_dir="./logs", log_name="cartesian_planner.log", verbose=True)
 class CartesianPlanner:
+    def __init__(self, verbose: bool=False):
+        self.logger = BeautyLogger(log_dir="./logs", 
+                                   log_name="cartesian_planner.log", 
+                                   verbose=verbose)
+
     def plan(
             self,
-            ik_controller: IKController,
             start_joint_angles: List[float],
-            robot_model: RobotArm,
-            waypoints: List[List[float]]
-            ) -> Tuple[List[List[float]], List[List[float]]]:
+            robot_model: AliciaFollower,
+            waypoints: List[List[float]],
+            ) -> List[List[float]]:
         """
-        输入一系列末端姿态点，依次插值每段轨迹并解 IK，输出全关节轨迹
+        输入一系列末端姿态点，依次插值每段轨迹，返回插值后的末端轨迹
         """
-        joint_traj = []
+        self.logger.module("[CartesianPlanner]开始POSE轨迹插值规划")
+        
+        t0 = time.time()   
         pose_traj = []
 
-        cur_angles = start_joint_angles.copy()
-        cur_pose = np.concatenate(robot_model.forward_kinematics(cur_angles)).tolist()
-
+        cur_pose = np.concatenate(robot_model.forward_kinematics(start_joint_angles)).tolist()
         all_points = [cur_pose] + waypoints  # 加入起点
 
+        # 对waypoints的每两个点之间插值
         for i in range(len(all_points) - 1):
             p1, p2 = np.array(all_points[i]), np.array(all_points[i + 1])
             steps = self._estimate_steps_between_poses(p1, p2)
-
             interp_poses = self.interpolate_pose_trajectory(p1, p2, num_steps=steps)
-            for j, pose in enumerate(interp_poses):
-                if i == 0 and j == 0:
-                    # 起点关节角直接记录
-                    joint_traj.append(cur_angles)
-                    pose_traj.append(pose)
-                    continue
-
-                ik_controller.set_target(pos=pose[:3], quat=pose[3:])
-                try:
-                    solved = ik_controller.solve(initial_angles=cur_angles)
-                    joint_traj.append(solved)
-                    pose_traj.append(pose)
-                    cur_angles = solved.copy()
-                except Exception as e:
-                    logger.warning(f"[CartesianPlanner] 第{i}-{j}点 IK 失败: {e}")
-                    continue
-            
-        return pose_traj, joint_traj
+               
+            if i == 0:
+                pose_traj.extend(interp_poses)
+            else:
+                pose_traj.extend(interp_poses[1:])
+        
+        t1 = time.time()
+        self.logger.info("[CartesianPlanner]完成POSE轨迹插值规划, "
+                    f"规划用时{t1-t0: .2f}, 共{len(pose_traj)}个轨迹点")
+        
+        return pose_traj    
 
     def _estimate_steps_between_poses(self, 
                                       pose1: np.ndarray, 
                                       pose2: np.ndarray, 
-                                      base_steps: int = 50) -> int:
+                                      base_steps: int = 50,
+                                      max_steps: int = 100) -> int:
         """
         根据两个姿态之间的差异估算所需的插值步数
         """
@@ -72,7 +70,7 @@ class CartesianPlanner:
         step_ori = ori_diff_deg    # 每 1 度对应 1 步
 
         steps = int(base_steps + step_pos + step_ori)
-        return max(5, min(steps, 100))  # 限制步数在范围内
+        return max(5, min(steps, max_steps))  # 限制步数在范围内
 
     def interpolate_pose_trajectory(self, 
                                      pose_start: np.ndarray, 

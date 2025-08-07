@@ -1,29 +1,22 @@
 # advanced_ik_solver.py
 import numpy as np
 from typing import Dict, List, Tuple, Union
-from .robot_model import RobotArm
+from .robot_model import AliciaFollower
 from ..utils.logger import BeautyLogger
 from scipy.spatial.transform import Rotation as R
 
 logger = BeautyLogger(log_dir="./logs", log_name="ik.log", verbose=False)
 
 class Advanced6DOFIKSolver:
-    def __init__(self, robot_arm: RobotArm, max_iters: int=150):
-        self.robot_arm = robot_arm
+    def __init__(self, robot_model: AliciaFollower, max_iters: int=150):
+        self.robot_model = robot_model
         self.max_iters = max_iters
         self.position_tol = 0.005
         self.orientation_tol = 0.05
         self.step_size = 0.03  # 初始步长
 
-        # 关节限制（可根据实际机械臂参数调整）
-        self.joint_limits = {
-            'joint1': (-2.16, 2.16),
-            'joint2': (-1.57, 1.57),
-            'joint3': (-0.5, 2.35619),
-            'joint4': (-3.14, 3.14),
-            'joint5': (-1.57, 1.5),
-            'joint6': (-3.14, 3.14)
-        }
+        # 关节限制
+        self.joint_limits = self.robot_model.joint_limit
 
     def solve(self, target_pos: np.ndarray, 
               target_quat: np.ndarray, 
@@ -35,7 +28,7 @@ class Advanced6DOFIKSolver:
         best_error = float('inf')
 
         for i in range(self.max_iters):
-            current_pos, current_quat = self.robot_arm.forward_kinematics(current_angles)
+            current_pos, current_quat = self.robot_model.forward_kinematics(current_angles)
 
             pos_error = target_pos - current_pos
             pos_error_norm = np.linalg.norm(pos_error)
@@ -99,7 +92,7 @@ class Advanced6DOFIKSolver:
         epsilon = 1e-5
         J = np.zeros((6, 6))
 
-        base_pos, base_quat = self.robot_arm.forward_kinematics(angles)
+        base_pos, base_quat = self.robot_model.forward_kinematics(angles)
 
         for i, name in enumerate(joint_names):
             perturbed_pos = angles.copy()
@@ -107,8 +100,8 @@ class Advanced6DOFIKSolver:
             perturbed_pos[name] += epsilon
             perturbed_neg[name] -= epsilon
 
-            pos_plus, quat_plus = self.robot_arm.forward_kinematics(perturbed_pos)
-            pos_minus, quat_minus = self.robot_arm.forward_kinematics(perturbed_neg)
+            pos_plus, quat_plus = self.robot_model.forward_kinematics(perturbed_pos)
+            pos_minus, quat_minus = self.robot_model.forward_kinematics(perturbed_neg)
 
             dp = (pos_plus - pos_minus) / (2 * epsilon)
             dw = self._compute_angular_velocity(quat_plus, quat_minus, base_quat, epsilon)

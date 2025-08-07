@@ -92,7 +92,7 @@ class ArmController:
         """
         start_time = time.time()
         while time.time() - start_time < timeout:
-            js = self.read_joint_state()
+            js = self.get_joint_state()
             if js and max(abs(a) for a in js.angles) > 1e-3:
                 return True
             time.sleep(0.05)
@@ -240,16 +240,12 @@ class ArmController:
         # 直接返回当前状态，不需要额外读取数据
         return self.data_parser.get_joint_state()
     
-    def set_joint_angles(self, joint_angles: List[float], gripper_angle: float = None, timeout: float = 5.0, tolerance: float = 0.08) -> bool:
+    def set_joint_angles(self, joint_angles: List[float]) -> bool:
         """
         设置关节角度（弧度）
         
         Args:
             joint_angles: 6个关节的角度列表（弧度）
-            gripper_angle: 夹爪角度（弧度），如果为None则不发送夹爪命令
-            wait_for_completion: 是否等待运动完成
-            timeout: 等待运动完成的超时时间（秒）
-            tolerance: 角度误差容忍度（弧度）
             
         Returns:
             bool: 命令是否成功发送和执行
@@ -265,11 +261,6 @@ class ArmController:
         # 发送关节控制命令
         for i in range(2):
             result = self.serial_comm.send_data(frame)
-        
-        # 如果需要控制夹爪
-        if gripper_angle is not None and result:
-            #time.sleep(0.02)  # 短暂延时，避免连续发送导致丢包
-            result = self.set_gripper(gripper_angle)
             
         return result
     
@@ -318,10 +309,8 @@ class ArmController:
         
         # 发送力矩使能命令
         result = self.serial_comm.send_data(frame)
-        time.sleep(1)
+        time.sleep(0.5)
         
-        if result:
-            logger.info("扭矩已开启")
         return result
     
     def disable_torque(self) -> bool:
@@ -336,10 +325,8 @@ class ArmController:
         
         # 发送力矩使能命令
         result = self.serial_comm.send_data(frame)
-        time.sleep(1)
-        
-        if result:
-            logger.info("扭矩已关闭")
+        time.sleep(0.5)
+
         return result
     
     

@@ -1,161 +1,221 @@
 # motion_api.py (in controller/)
 # from ..planning.planner_registry import get_planner
-from ..utils import *
-from ..kinematics import *
+from ..utils.coord.validation import validate_joint_list, validate_waypoints 
+from ..utils.logger import BeautyLogger
+from ..utils.coord import check_and_clip_joint_limits, compute_steps_and_delay
 from ..planning.planners import *
-from ..execution.trajectory_executor import TrajectoryExecutor
-
-from typing import List, Optional
-import numpy as np
 
 from .motion_session import MotionSession
-from .utils import *
 
-import time
+from typing import List, Union
+import numpy as np
+import time, sys, select
+
 
 logger = BeautyLogger(log_dir="./logs", log_name="move.log", verbose=True)
 
 class ControlApi():
     def __init__(self, session:MotionSession):
+        # 控制器
         self.session = session
         self.joint_controller = session.joint_controller
         self.robot_model = session.robot_model
         self.ik_controller = session.ik_controller
+        self.executor = session.executor
 
+        # 参数
+        self.max_cartesian_delay = 0.05
+        self.min_cartesian_delay = 0.005
+        self.max_cartesian_time = 10.0
+
+        # 默认位置关节角度和位姿
         self.home_angles = [0.0] * 6
+        self.home_pose = [0.3086, -0.0025, 0.0890,  # x, y, z
+                          0.0029, 0.9310, -0.0028, 0.3649]  # x, y, z ,w
 
     def moveCartesian(
         self,
-        waypoints: List[List[float]],  # List of [x, y, z, qx, qy, qz, qw]
-        start_joint_angles: Optional[List[float]] = None,
+        waypoints: Union[List[List[float]], List[float]], 
         planner_name: str = "cartesian",
         visualize: bool = False,
-        move_time: float = 3.0
+        show_ori: bool = False,
+        move_time: float = 3.0,
+        reverse: bool = False
     ):
         """
         多段 Cartesian 插值轨迹规划（带 IK 解算）并执行
 
         Args:
-            session: 当前机器人会话（包含IK/模型/关节控制器）
-            pose_sequence: 末端姿态点序列 [[x, y, z, qx, qy, qz, qw], ...]
-            start_joint_angles: 起始关节角度（如果未提供，则从当前状态读取）
-            planner_name: 插值规划器名称，默认使用 "cartesian"
-            visualize: 是否可视化插值轨迹
-            delay: 执行每步之间的延迟（单位：秒）
+            waypoints: 单个或多个末端姿态点（[x, y, z, qx, qy, qz, qw]）
+            start_joint_angles: 起始关节弧度值（如果未提供，则从当前状态读取）
+            planner_name: 插值规划器名称，默认使用 "cartesian", 可选 'lqt'
+            visualize: 是否可视化规划轨迹
+            show_ori: 是否在姿态3D轨迹图中显示位姿
+            move_time: 总执行时间（秒），将自动计算每步延迟
+            reverse: 是否将waypoints最后的点作为起点
         """
-        validate_pose_sequence(waypoints)
+        # 校验数据
+        if isinstance(waypoints[0], (int, float)) and len(waypoints) == 7:
+            waypoints = [waypoints]
+        validate_waypoints(waypoints)
 
-        if start_joint_angles is None:
-            start_joint_angles = self.joint_controller.get_joint_angles()
-        else:
-            validate_joint_list(start_joint_angles)
+        # 建立规划器和导入当前机械臂角度
+        if planner_name == 'cartesian':
+            planner = CartesianPlanner(verbose=True)
+        elif planner_name == 'lqt':
+            planner = LQT(verbose=True)
 
-        logger.module("[moveCartesian]开始规划")
-        t0 = time.time()
-        planner = CartesianPlanner()
+        start_joint_angles = self.joint_controller.get_joint_angles()
 
-        pose_traj, joint_traj = planner.plan(
-            ik_controller=self.ik_controller,
-            start_joint_angles=start_joint_angles,
-            robot_model=self.robot_model,
-            waypoints=waypoints
+        logger.module("[moveCartesian] 开始调用moveCartesian API")
+        logger.info(f"[moveCartesian] 一共有 {len(waypoints)} 个途经点")
+        logger.info(f"[moveCartesian] 当前规划器为 {planner_name}")
+
+        # 反转路径方向
+        if reverse:
+            logger.info("[moveCartesian] 已启用反向模式，从末尾路径点开始进行轨迹规划")
+            waypoints = waypoints[::-1]
+
+        logger.info("[moveCartesian] 开始插值末端姿态轨迹，求解关节轨迹并执行") 
+
+        # 插值末端姿态轨迹
+        if planner_name == 'cartesian':
+            pose_traj = planner.plan(
+                start_joint_angles=start_joint_angles,
+                robot_model=self.robot_model,
+                waypoints=waypoints
+            )
+
+        elif planner_name == 'lqt':
+            p0 = self.get_pose()
+            waypoints.insert(0, p0)
+            pose_traj = planner.plan(
+                via_points=waypoints,
+                nbdata= 200
+            )
+        
+        # 判断并选择 IK 解算方式
+        joint_traj = self.ik_controller.solve_ik(
+            pose_traj=pose_traj,
+            initial_angles=start_joint_angles,
+            output_format='as_list'
         )
 
-        t1 = time.time()
-
-        T_max = 10.0  # 最长允许的总时间（秒）
-        max_delay = 0.05  # 每步最大延迟，单位秒
-        min_delay = 0.005  # 每步最小延迟，单位秒
-
+        # 根据规划点数计算每步的延时
         total_steps = len(joint_traj)
-        t = min(T_max, move_time)
+        t = min(self.max_cartesian_time, move_time)
         computed_delay = t / total_steps
-        delay = min(max(computed_delay, min_delay), max_delay)
+        delay = min(max(computed_delay, self.min_cartesian_delay),
+                     self.max_cartesian_delay)
 
-        logger.info(f"[moveCartesian] 规划完成，共 {len(joint_traj)} 点，"
-                    f"规划用时 {t1 - t0:.2f} 秒,"
-                    f"每步间隔{delay} 秒")
-        
-        executor = TrajectoryExecutor(self.joint_controller, delay=delay)
-        executor.execute(
-            trajectory=joint_traj,
-            robot_model=self.robot_model,
+        self.executor.delay = delay
+        self.executor.execute(
+            joint_traj=joint_traj,
+            pose_traj=pose_traj,
             visualize=visualize,
-            show_ori=True)
-
+            show_ori=show_ori)
 
     def moveJ(
         self,
-        cur_angles: Optional[List[float]] = None,
-        target_angles: List[float] = None,
+        joint_format: str = 'rad',
+        target_joints: List[float] = None,
         speed_factor: float = 1.0,
         T_default: float = 4.0,
         n_steps_ref: int = 200,
-        visualize: bool = False,
-        show_ori: bool = False
-
-    ):
+        visualize: bool = False
+        ):
         """
-        控制机械臂从当前关节角度平滑移动到目标关节角度，使用 cubic 插值和速度因子控制时间
+        控制机械臂从当前位置平滑移动至目标关节角度，使用 cubic 插值与速度控制
 
         Args:
-            session (MotionSession): 当前机器人会话对象，包含关节控制器与模型
-            cur_angles (Optional[List[float]]): 当前角度列表（如果为 None，将从机械臂读取当前角度）
-            target_angles (List[float]): 目标角度列表（必须指定）
-            speed_factor (float): 速度倍率（>1 更快，<1 更慢，默认为 1.0）
-            T_default (float): 默认总时长（当 speed_factor=1 时所用的时间，单位秒）
-            n_steps_ref (int): 默认插值步数（用于参考步数缩放）
-            visualize (bool): 是否画出关节轨迹图和3D位姿轨迹图
-            show_ori (bool): 在3D位姿图中是否标出末端姿态
-
-        Raises:
-            ValueError: 若当前角度与目标角度维度不一致或未提供目标角度
+            joint_format (str): 输入角度单位，'rad' 或 'deg'
+            target_joints (List[float]): 目标关节角度
+            speed_factor (float): 速度倍率，>1 更快，<1 更慢
+            T_default (float): 默认插值总时长（秒）
+            n_steps_ref (int): 参考插值步数
+            visualize (bool): 是否可视化轨迹
+            show_ori (bool): 是否可视化末端姿态
         """
-        if target_angles is None:
-            raise ValueError("必须提供目标角度 target_angles")
+        logger.module("[moveJ] 开始执行关节空间插值移动")
 
-        # 若未提供当前角度，则从机器人状态中获取
-        if cur_angles is None:
-            cur_angles = self.joint_controller.get_joint_angles()
+        if target_joints is None:
+            raise ValueError("[moveJ] 请提供 target_joints 参数")
 
-        if len(cur_angles) != len(target_angles):
-            raise ValueError(f"错误: 当前角度数量是 {len(cur_angles)} "
-                            f"与目标角度数量 {len(target_angles)} 不匹配")
+        joint_format = joint_format.lower()
+        if joint_format not in ['rad', 'deg']:  
+            raise ValueError(f"[moveJ] 不支持的 joint_format: '{joint_format}'，"
+                             "应为 'rad' 或 'deg'")
 
-        # 根据速度因子计算插值步数和每步延迟
+        # 支持角度制输入
+        if joint_format == 'deg':
+            logger.info("[moveJ] 输入角度单位为 degree，将转换为 rad")
+            target_joints = [a * self.joint_controller.DEG_TO_RAD for a in target_joints]
+
+        validate_joint_list(target_joints)
+
+        # 检查关节限位并修正
+        target_joints, violations = check_and_clip_joint_limits(
+            joints=target_joints,
+            joint_limits=self.robot_model.joint_limit
+        )
+
+        for joint_name, original, clipped in violations:
+            logger.warning(
+                f"[moveJ] {joint_name} 超出限制：{original:.2f} -> 已截断为 {clipped:.2f}"
+            )
+
+        # 获取当前状态
+        cur_angles = self.joint_controller.get_joint_angles()
+
+        # 插值步数与延迟
         steps, delay = compute_steps_and_delay(
             speed_factor=speed_factor,
             T_default=T_default,
             n_steps_ref=n_steps_ref
         )
 
-        # 构造插值轨迹
-        traj = []
-        for step in range(1, steps + 1):
-            ratio = ease_in_out_cubic(step / steps)
-            interp_angles = [
-                current + (target - current) * ratio
-                for current, target in zip(cur_angles, target_angles)
-            ]
-            traj.append(interp_angles)
+        # 插值轨迹生成
+        planner = JointPlanner()
+        
+        joint_traj = planner.plan(
+            start_angles=cur_angles,
+            target_angles=target_joints,
+            steps=steps
+            )
 
-        # 日志输出轨迹信息
-        logger.info(
-        f"[moveJ] 从角度 {np.round(cur_angles, 3).tolist()} "
-        f"移动到 {np.round(target_angles, 3).tolist()},"
-        f"共 {steps} 步，每步间隔 {delay:.3f}s"
-        )   
+        if joint_format == 'deg':
+            display_cur = [round(a * self.joint_controller.RAD_TO_DEG, 1) 
+                           for a in cur_angles]
+            display_target = [round(a * self.joint_controller.RAD_TO_DEG, 1) 
+                              for a in target_joints]
+            unit = "°"
+        else:
+            display_cur = [round(a, 3) for a in cur_angles]
+            display_target = [round(a, 3) for a in target_joints]
+            unit = "rad"
+
+        # 日志输出
+        logger.info(f"[moveJ] 起始角度 ({unit}): {display_cur}")
+        logger.info(f"[moveJ] 目标角度 ({unit}): {display_target}")
+        logger.info(f"[moveJ] 插值步数: {steps}，单步延迟: {delay:.3f}s，"
+                    f"预计总耗时: {steps * delay:.0f}s")
 
         # 执行轨迹
-        executor = TrajectoryExecutor(self.joint_controller, delay=delay)
-        executor.execute(traj, robot_model=self.robot_model, 
-                        visualize=visualize, show_ori=show_ori)
-
+        self.executor.delay = delay
+        self.executor.execute(
+            joint_traj=joint_traj,
+            visualize=visualize
+        )
 
     def moveHome(self):
-        self.moveJ(target_angles=self.home_angles)
-    
-    def get_angles(self) -> List[float]:
+        '''
+        控制机械臂返回默认位置
+        '''
+        logger.module("[moveHome] 开始移动到初始位置")
+        self.moveJ(target_joints=self.home_angles)
+
+   
+    def get_joints(self) -> List[float]:
         """
         获取当前关节角度（单位：弧度）
         Returns:
@@ -173,7 +233,7 @@ class ControlApi():
         pos, quat = self.robot_model.forward_kinematics(joint_angles)
         return np.concatenate([pos, quat]).tolist()
 
-    def get_gripper_state(self) -> float:
+    def get_gripper(self) -> float:
         """
         获取当前夹爪角度（弧度）
 
@@ -184,7 +244,8 @@ class ControlApi():
         return state.gripper if state else None
     
     def gripper_control(self, command: str = None, angle_deg: float = None,
-                    timeout: float = 5.0, tolerance: float = 0.1) -> bool:
+                        wait_for_completion: bool=True,
+                        timeout: float = 5.0, tolerance: float = 1.0) -> None:
         """
         控制夹爪开合或设置角度，并阻塞等待夹爪到达目标位置
 
@@ -197,52 +258,179 @@ class ControlApi():
         Returns:
             bool: 是否成功执行到位
         """
-        if command:
+        if command is not None and angle_deg is not None:
+            raise ValueError("[gripper_control] command 与 angle_deg 参数不可同时指定")
+
+        if command is not None:
             if command == "open":
                 angle_deg = 0.0
+                logger.module("[gripper_control] 正在打开夹爪")
             elif command == "close":
                 angle_deg = 100.0
+                logger.module("[gripper_control] 正在关闭夹爪")
             else:
-                raise ValueError("command 必须是 'open' 或 'close'")
-        elif angle_deg is None:
+                raise ValueError("command 参数必须是 'open' 或 'close'")
+
+        if angle_deg is None:
             raise ValueError("必须提供 command 或 angle_deg 参数")
 
         # 转换为弧度
         angle_rad = angle_deg * self.joint_controller.DEG_TO_RAD
 
-        # 发送控制帧（最多发2次）
-        frame = self.joint_controller._build_gripper_frame(angle_rad)
-        success = False
-        for _ in range(2):
-            success = self.joint_controller.serial_comm.send_data(frame)
-        if not success:
-            logger.warning("夹爪控制帧发送失败")
-            return False
+        # 发送夹爪指令
+        logger.module(f"[gripper_control]正在设置夹爪到{angle_deg}°")
+        result = self.joint_controller.set_gripper(angle_rad)
 
-        # 等待夹爪运动完成
-        if self.joint_controller.debug_mode:
-            logger.debug(f"等待夹爪移动至 {angle_deg:.1f}°")
-
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            state = self.joint_controller.get_joint_state()
-            if state and abs(state.gripper - angle_rad) <= tolerance:
-                if self.joint_controller.debug_mode:
-                    logger.debug("夹爪已到达目标")
-                return True
-            time.sleep(0.02)
-
-        logger.warning("夹爪运动等待超时")
-        return False
+        if result:
+            logger.info("[gripper_control]夹爪数据发送成功")
+            if wait_for_completion:
+                start_time = time.time()
+                success = False
+                while time.time() - start_time < timeout:
+                    gripper_deg = self.get_gripper() * self.joint_controller.RAD_TO_DEG
+                    if gripper_deg and abs(gripper_deg - angle_deg) <= tolerance:
+                        logger.info(f"[gripper_control] 夹爪已到达目标角度：{angle_deg:.1f}°，"
+                                    f"实际角度：{gripper_deg:.1f}°，误差：{gripper_deg - angle_deg:.2f}°")
+                        success = True
+                        break
+                    time.sleep(0.1)
+                if not success:
+                    logger.warning("[gripper_control]夹爪运动等待超时,"
+                                   f"当前角度{gripper_deg: 2f}°")
 
 
-    
-    def print_state(self):
-        return 
-    
-    def torque_control(self):
-        return
-    
-    def zero_calibration(self):
-        return
+    def print_state(self, continous_printing: bool = False, output_format: str = "deg") -> None:
+        """
+        打印当前机械臂关节角度和夹爪状态
+
+        Args:
+            continous_printing (bool): 是否持续打印（按 Ctrl+C 中断）
+            output_format (str): 输出格式，"deg" 或 "rad"
+        """
+        def _print_once():
+            joint_rad = self.get_joints()
+            gripper_rad = self.get_gripper()
+
+            if joint_rad is None or gripper_rad is None:
+                logger.warning("[print_state] 当前没有有效的状态信息")
+                return
+
+            if output_format == 'deg':
+                joint_deg = [round(a * self.joint_controller.RAD_TO_DEG, 1) for a in joint_rad]
+                gripper_deg = round(gripper_rad * self.joint_controller.RAD_TO_DEG, 1)
+                pose = self.get_pose()
+                pos = [round(p,3) for p in pose[:3]]
+                quat = [round(q,3) for q in pose[3:]]
+
+                logger.module("[print_state] 开始打印机械臂信息")
+                logger.info(f"[print_state] 关节角度（单位：度）: {joint_deg}")
+                logger.info(f"[print_state] 机械臂位置: {pos}")
+                logger.info(f"[print_state] 机械臂四元角: {quat}")
+                logger.info(f"[print_state] 夹爪角度（单位：度）: {gripper_deg}")
+            
+            elif output_format == 'rad':
+                joint_rad_round = [round(joint, 3) for joint in joint_rad]
+                gripper_rad_round = round(gripper_rad, 2)
+                pose = self.get_pose()
+                pos = [round(p,3) for p in pose[:3]]
+                quat = [round(q,3) for q in pose[3:]]
+
+                logger.module("[print_state] 开始打印机械臂信息")
+                logger.info(f"[print_state] 关节角度（单位：弧度）: {joint_rad_round}")
+                logger.info(f"[print_state] 机械臂位置: {pos}")
+                logger.info(f"[print_state] 机械臂四元角: {quat}")
+                logger.info(f"[print_state] 夹爪角度（单位：弧度）: {gripper_rad_round}")
+            
+            else:
+                logger.warning(f"[print_state] 不支持的输出格式：{output_format}")
+
+        if continous_printing:
+            logger.module("[print_state] 开启持续状态打印，按 Enter 停止")
+            time.sleep(1)
+            try:
+                while True:
+                    _print_once()
+                    time.sleep(0.5)  # 打印间隔（可调）
+                    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                            input()  # 停止读取
+                            logger.module("[print_state] 持续打印已停止")
+                            break
+            except KeyboardInterrupt:
+                logger.module("[print_state] 持续打印已停止")
+                
+
+        else:
+
+            _print_once()
+
+
+
+    def torque_control(self, command: str=None) -> bool:
+        """
+        控制机械臂扭矩开关（可选择开启或关闭）
+
+        Arg:
+            command (str): on 开启扭矩， off 关闭扭矩
+        """
+        if command == "on":
+            logger.module("[torque_control]正在开启扭矩")
+            result = self.joint_controller.enable_torque()
+            if result:
+                logger.info("[torque_control]扭矩成功开启")
+            else:
+                logger.warning("[torque_control]扭矩开启失败，请重试")
+
+        elif command == "off":
+            logger.module("[torque_control]正在关闭扭矩")
+            logger.info("[torque_control]按下回车关闭扭矩，请固定好机械臂")
+            input()
+            result = self.joint_controller.disable_torque()
+            if result:
+                logger.info("[torque_control]扭矩成功关闭")
+            else:
+                logger.warning("[torque_control]扭矩关闭失败，请重试")
+
+        else:
+            logger.warning("[torque_control]command指令错误， "
+                           "command只接受 'on' 或者 'off', "
+                           f"当前指令为 {command}")
+            result = False
+
+        return result
+
+    def zero_calibration(self) -> None:
+        """
+        执行归零校准流程（需手动拖拽机械臂至初始位）
+
+        步骤:
+        1. 提示用户是否执行归零
+        2. 关闭扭矩 -> 拖动机械臂 -> 按下回车
+        3. 重新打开扭矩
+        4. 执行零位标定函数
+        """
+        logger.module("[zero_calibration] 准备执行归零操作")
+
+        # 关闭扭矩
+        if not self.torque_control('off'):
+            logger.warning("[zero_calibration] 扭矩关闭失败，终止归零操作")
+            return
+
+        logger.info("[zero_calibration] 扭矩已关闭，可手动拖动机械臂到零点位置")
+        logger.info("[zero_calibration] 拖动完成后按下回车继续")
+        input()
+
+        # 重新开启扭矩
+        logger.module("[zero_calibration] 正在重新开启扭矩")
+        if not self.torque_control('on'):
+            logger.warning("[zero_calibration] 扭矩开启失败，终止归零操作")
+            return
+
+        # 执行零点校准
+        logger.module("[zero_calibration] 正在执行零位校准")
+        result = self.joint_controller.set_zero_position()
+
+        if result:
+            logger.info("[zero_calibration] 零位校准成功")
+        else:
+            logger.warning("[zero_calibration] 零位校准失败，请重试")
     

@@ -10,7 +10,6 @@ from .motion_session import MotionSession
 
 __all__ = [
     "get_default_session",
-    "Arm_Api",
+    "ControlApi",
     "MotionSession"
-    
 ]

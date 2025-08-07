@@ -2,17 +2,19 @@
 import numpy as np
 from typing import Dict, List, Union
 from .advanced_ik_solver import Advanced6DOFIKSolver
-from .robot_model import RobotArm
+from .robot_model import AliciaFollower
 from ..utils.logger import BeautyLogger
+import time
 
 logger = BeautyLogger(log_dir="./logs", log_name="ik_controller.log", verbose=True)
 
 JointInput = Union[List[float], np.ndarray, Dict[str, float]]
+PoseInput = Union[List[float], List[List[float]]]
 
 class IKController:
-    def __init__(self, robot_arm: RobotArm):
-        self.robot_arm = robot_arm
-        self.ik_solver = Advanced6DOFIKSolver(robot_arm)
+    def __init__(self, robot_model: AliciaFollower):
+        self.robot_model = robot_model
+        self.ik_solver = Advanced6DOFIKSolver(robot_model)
         self._target_pos = None
         self._target_quat = None
 
@@ -30,34 +32,55 @@ class IKController:
         self._target_pos = np.array(pos)
         self._target_quat = np.array(quat)
 
-    def solve(self, initial_angles: JointInput, 
-              output_format: str = 'list') -> List[float]:
+    def solve_ik(self, 
+                initial_angles: JointInput, 
+                pose_traj: PoseInput,
+                output_format: str = 'as_list'
+                ) -> Union[List[float], List[List[float]]]:
         """
-        执行 IK 解算
+        执行 IK 解算，自动支持单个或多个末端姿态点
+
         Args:
             initial_angles: 初始角度，支持 list / np.array / dict
-            output_format: 输出格式，'list' 或 'dict'
+            pose_traj: 单个姿态点 [x, y, z, qx, qy, qz, qw] 或多个点的列表
+            output_format: 'as_list' 或 'as_dict'
 
         Returns:
-            IK 解，格式可选
+            单个POSE解: List[float] 或 Dict[str, float]
+            POSE轨迹解: List[List[float]] 或 List[Dict[str, float]]
         """
-        if self._target_pos is None or self._target_quat is None:
-            raise RuntimeError("未设置目标位姿，请先调用 set_target()")
-
         initial_angles = self._convert_to_dict(initial_angles)
 
-        solution = self.ik_solver.solve(
-            target_pos=self._target_pos,
-            target_quat=self._target_quat,
-            initial_angles=initial_angles
-        )
+        # 判断是否是单个点
+        is_single_pose = isinstance(pose_traj[0], (float, int)) and len(pose_traj) == 7
+        poses = [pose_traj] if is_single_pose else pose_traj
 
-        if output_format == 'list':
-            return [solution[f'joint{i+1}'] for i in range(6)]
-        elif output_format == 'dict':
-            return solution
-        else:
-            raise ValueError("output_format 必须为 'list' 或 'dict'")
+        logger.module(f"[ik_controller] 开始求解IK")
+        joint_traj = []
+        cur_angles = initial_angles
+        t0 = time.time()
+
+        for i, pose in enumerate(poses):
+            self.set_target(pos=pose[:3], quat=pose[3:])
+            solution = self.ik_solver.solve(
+                target_pos=self._target_pos,
+                target_quat=self._target_quat,
+                initial_angles=cur_angles
+            )
+            cur_angles = solution  # 用上一个结果作为初始角度
+
+            if output_format == 'as_list':
+                joint_traj.append([solution[f'joint{i+1}'] for i in range(6)])
+            elif output_format == 'as_dict':
+                joint_traj.append(solution)
+            else:
+                raise ValueError("output_format 必须为 'as_list' 或 'as_dict'")
+            
+        t1 = time.time()
+        logger.info(f"[ik_controller] IK求解结束， 用时{t1-t0: .2f}秒")
+
+        return joint_traj[0] if is_single_pose else joint_traj
+
 
     def _convert_to_dict(self, angles: JointInput) -> Dict[str, float]:
         """统一将角度输入转换为 {joint1: x, ..., joint6: y} 格式"""

@@ -3,7 +3,7 @@ import numpy as np
 from typing import Dict, Tuple, List, Union
 from ..utils import *
 
-class RobotArm:
+class AliciaFollower:
     def __init__(self, robot_model: str = 'alicia_5_4'):
         self.kinematic_chain = [
             'joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6', 'tool0'
@@ -52,9 +52,20 @@ class RobotArm:
                 'type': 'fixed'
             }
         }
+        
+        # 关节限制
+        self.joint_limits_alicia_D_5_4 = {
+            'joint1': (-2.16, 2.16),
+            'joint2': (-1.57, 1.57),
+            'joint3': (-0.5, 2.35619),
+            'joint4': (-3.14, 3.14),
+            'joint5': (-1.57, 1.5),
+            'joint6': (-3.14, 3.14)
+        }
 
         if robot_model == 'alicia_5_4':
             self.joint_hierarchy = self.joint_hierarchy_alicia_D_5_4
+            self.joint_limit = self.joint_limits_alicia_D_5_4
             
         self.base_pose = {
             'position': [0.0, 0.0, 0.0],           # 平移

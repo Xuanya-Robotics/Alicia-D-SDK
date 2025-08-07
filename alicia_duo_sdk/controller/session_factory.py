@@ -1,7 +1,8 @@
 # controller/session_factory.py
 
 from ..driver.servo_driver import ArmController
-from ..kinematics import RobotArm, IKController
+from ..kinematics import AliciaFollower, IKController
+from ..execution import TrajectoryExecutor
 from .motion_session import MotionSession
 from ..utils.logger import BeautyLogger
 
@@ -25,22 +26,27 @@ def get_default_session(
     Returns:
         MotionSession: 构建完成的控制上下文
     """
-    logger.module("[session]开始构建默认会话")
-    logger.info("[session]]初始化 RobotArm 模型...")
-    robot_model = RobotArm()
+    logger.module("[session] 开始构建默认会话")
+    logger.info("[session]] 初始化 AliciaFollower 模型")
+    robot_model = AliciaFollower()
 
-    logger.info("[session]初始化 IK 控制器...")
+    logger.info("[session] 初始化 IK 控制器")
     ik_controller = IKController(robot_model)
 
-    logger.info(f"[session]初始化机械臂控制器 (port='{port}', baudrate={baudrate})")
+    logger.info(f"[session] 初始化机械臂控制器 (port='{port}', baudrate={baudrate})")
     joint_controller = ArmController(port=port, baudrate=baudrate, debug_mode=debug)
 
-    logger.info("[session]正在连接机械臂")
+    logger.info("[session] 初始化执行器")
+    executor = TrajectoryExecutor(joint_controller=joint_controller, 
+                                  robot_model=robot_model)
+
+    logger.info("[session] 正在连接机械臂")
     if not joint_controller.connect():
-        logger.warning("[session]会话建立失败")
+        logger.warning("[session] 会话建立失败")
         raise RuntimeError("连接机械臂失败，请检查串口连接")
 
-    logger.info("会话创建成功")
+    logger.info("[session] 会话创建成功")
     return MotionSession(ik_controller=ik_controller,
                           robot_model=robot_model, 
-                          joint_controller=joint_controller)
+                          joint_controller=joint_controller,
+                          executor=executor)

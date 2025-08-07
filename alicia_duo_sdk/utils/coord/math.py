@@ -1,37 +1,30 @@
-# utils/trajectory.py
+def compute_steps_and_delay(
+    speed_factor: float,
+    T_default: float = 3.6,
+    n_steps_ref: int = 120,
+    min_steps: int = 50,
+    max_steps: int = 500,
+    min_delay: float = 0.01,
+    max_delay: float = 0.1
+):
+    """
+    根据速度因子同时调整插值步数和每步延迟，使得总时间约为 T_default / speed_factor。
 
-import numpy as np
+    Returns:
+        n_steps (int): 插值步数
+        step_delay (float): 每步延迟（秒）
+    """
+    if speed_factor <= 0:
+        raise ValueError("速度因子必须大于 0")
 
-def invert_6x6_matrix(A: np.ndarray) -> np.ndarray:
-    """ 高斯-约旦法求解 6x6 矩阵逆 """
-    A = A.astype(np.float64)
-    n = 6
-    I = np.eye(n)
-    aug = np.hstack((A, I))
+    # 插值步数反比于速度
+    raw_steps = int(n_steps_ref / speed_factor)
+    n_steps = max(min_steps, min(raw_steps, max_steps))
 
-    for i in range(n):
-        max_row = np.argmax(np.abs(aug[i:, i])) + i
-        if aug[max_row, i] == 0:
-            raise np.linalg.LinAlgError("矩阵不可逆")
-        aug[[i, max_row]] = aug[[max_row, i]]
-        aug[i] = aug[i] / aug[i, i]
-        for j in range(n):
-            if j != i:
-                aug[j] -= aug[j, i] * aug[i]
+    # 根据实际步数计算单步时间
+    total_time = T_default / speed_factor
+    raw_delay = total_time / n_steps
+    step_delay = max(min_delay, min(raw_delay, max_delay))
 
-    return aug[:, n:]
+    return n_steps, step_delay
 
-def compute_adaptive_step_size(pos_error: float, ori_error: float, base_step: float) -> float:
-    """ 根据误差调整步长 """
-    norm_pos = pos_error / 0.01
-    norm_ori = ori_error / 0.087  # ≈5度
-    max_error = max(norm_pos, norm_ori)
-
-    if max_error > 2.0:
-        return base_step * 0.8
-    elif max_error > 1.0:
-        return base_step
-    elif max_error > 0.5:
-        return base_step * 1.2
-    else:
-        return base_step * 0.6
