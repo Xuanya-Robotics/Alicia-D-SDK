@@ -1,58 +1,59 @@
 # Alicia-D SDK  
 
-Alicia-D SDK 是一个用于控制 【灵动 Alicia-D】 系列六轴机械臂（带夹爪）的 Python 工具包。它提供了通过串口与机械臂通信、控制关节运动、操作夹爪以及读取状态信息的功能。
+Alicia-D SDK 是一个用于控制【灵动 Alicia-D】系列六轴机械臂（带夹爪）的 Python 工具包。它提供通过串口通信控制机械臂运动、操作夹爪、读取姿态与状态数据等功能。
 
 ## 主要特性
 
-*   **关节控制**: 设置和读取六个关节的角度。
-*   **夹爪控制**: 控制夹爪的开合角度。
-*   **力矩控制**: 启用或禁用机械臂关节力矩，允许自由拖动或锁定位置。
-*   **零点设置**: 将机械臂当前位置设置为新的零点。
-*   **状态读取**: 获取关节角度、夹爪角度和按钮状态的实时数据。
-*   **串口通信**: 自动查找或指定串口进行连接。
-*   **数据解析**: 解析来自机械臂的反馈数据帧。
+*   **关节控制**：支持设置与读取六个关节的角度，提供平滑插值执行。
+*   **末端轨迹**：基于 Cartesian 或 LQT 插值执行末端姿态轨迹。
+*   **夹爪控制**：支持精确角度控制或一键开关。
+*   **力矩控制**：开启或关闭关节电机扭矩，实现自由拖动（示教）。
+*   **零点设置**：将当前位置设置为新的零点。
+*   **状态读取**：实时获取关节角、夹爪角与末端姿态。
+*   **自动串口连接**：自动搜索串口或手动指定。
+*   **教学模式**：拖动记录姿态点并执行轨迹。
 
-## 目录结构
+## 项目结构
 
 ```
-Alicia_duo_sdk/
-├── alicia_duo_sdk/         # SDK 核心代码
-│   ├── __init__.py
-│   ├── controller.py       # 机械臂控制逻辑
-│   ├── data_parser.py      # 数据帧解析
-│   └── serial_comm.py      # 串口通信
-├── docs/                   # 文档
-│   ├── api_reference.md
-│   ├── examples.md
-│   └── installation.md
-├── examples/               # 示例代码
-│   ├── arm_movement.py
-│   ├── gripper_control.py
-│   └── read_angles.py
-├── LICENSE
-├── README.md              
-├── requirements.txt        # 依赖项 
-└── setup.py                # Python 包安装脚本
+alicia_duo_sdk/
+├── config/
+├── controller/
+├── driver/
+├── execution/
+├── kinematics/
+├── planning/
+├── utils/
+docs/
+├── api_reference.md
+├── examples.md
+├── installation.md
+examples/
+├── demo_gripper.py
+├── demo_moveCartesian.py
+├── demo_moveJ.py
+├── demo_read_state.py
+├── demo_torque_control.py
+├── demo_zero_calibration.py
+logs/
+setup.py
+requirements.txt
+README.md
 ```
 
 ## 快速开始
 
-1.  **安装**: 请参照 [docs/installation.md](docs/installation.md) 进行安装和配置。
-2.  **运行示例**:
-    进入 `examples` 目录，尝试运行一个示例脚本，例如读取机械臂角度：
-    ```sh
-    cd examples
-    python3 read_angles.py
-    ```
-    或者控制机械臂运动：
-    ```sh
-    python3 arm_movement.py
-    ```
+1.  安装：请参见 [安装指南](docs/installation.md)
+2.  运行示例：
+```bash
+cd examples
+python3 demo_read_state.py      # 读取状态
+python3 demo_moveJ.py           # 关节移动
+python3 demo_gripper.py         # 夹爪控制
+```
 
 ## 文档
 
 *   [安装指南](docs/installation.md)
 *   [示例说明](docs/examples.md)
 *   [API 参考](docs/api_reference.md)
-
-
