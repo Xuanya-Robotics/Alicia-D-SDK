@@ -104,6 +104,7 @@ class SerialComm:
             self.serial_port.close()
             logger.info("串口已关闭")
     
+
     def find_serial_port(self) -> str:
         """
         查找可用的串口设备
@@ -114,7 +115,12 @@ class SerialComm:
         # 记录当前时间，避免过频繁打印日志
         current_time = time.time()
         should_log = (current_time - self.last_log_time) >= 5.0  # 每5秒允许打印一次日志
-
+        if self.port_name:
+            if os.access(self.port_name, os.R_OK | os.W_OK):
+                logger.info(f"使用指定的端口: {self.port_name}")
+                return self.port_name
+            else:
+                logger.warning(f"指定的端口 {self.port_name} 不可用，将搜索其他设备")
         # 获取串口列表
         try:
             ports = list(serial.tools.list_ports.comports())
@@ -133,18 +139,7 @@ class SerialComm:
         # 如果没有端口
         if not ports:
             return ""
-        
-        # 首先尝试使用指定的端口
-        if self.port_name:
-            for port in ports:
-                if self.port_name in port.device:
-                    if os.access(port.device, os.R_OK | os.W_OK):
-                        if should_log:
-                            logger.info(f"使用指定的端口: {port.device}")
-                        return port.device
-            
-            if should_log:
-                logger.warning(f"指定的端口 {self.port_name} 不可用，将搜索其他设备")
+
         
         # 尝试找到可用的设备
         for port in ports:
