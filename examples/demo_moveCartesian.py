@@ -44,7 +44,7 @@ def teaching_demo_cartesian():
     controller.moveCartesian(
         waypoints=waypoints,
         reverse=True,           # 反向执行轨迹 （从最后一个记录点开始反向执行）
-        planner_name='cartesian',     # 可改为 'cartesian' 或 'linear'
+        planner_name='cartesian',     # 可改为 'cartesian' 或 'lqt'
         move_time=3.0,          # 预计执行时长
         visualize=True,         # 轨迹图可视化
         show_ori=True           # 轨迹图是否显示姿态
