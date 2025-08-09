@@ -43,6 +43,8 @@ venv.bak/
 *.swo
 .DS_Store
 
+*.log
+
 # Other
 # Thumbs.db
 # ehthumbs.db
