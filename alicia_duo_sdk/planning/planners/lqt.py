@@ -48,12 +48,44 @@ class LQT:
         Su, Sx = self.set_dynamical_system()
         u_hat, x_hat = self.get_u_x(mu, Q, R, Su, Sx)
         pose_traj = copy.deepcopy(x_hat[:,:7]).tolist()
+
+        # 如果输入的 via_points 含 gripper（任一第8列），则对 gripper 做线性/平滑插值
+        gripper_traj = None
+        if any(len(p) == 8 for p in via_points):
+            # 简单处理：按路径点区段线性插值至与 pose_traj 等长
+            # 这里使用 smoothstep 权重
+            def smoothstep(t: float) -> float:
+                return 3 * (t ** 2) - 2 * (t ** 3)
+
+            # 估算每段步数，基于位置+姿态变化的近似（与 CartesianPlanner 保持一致理念）
+            # 为简化，这里按等分 nbData 在各段平均分配
+            num_total = len(pose_traj)
+            num_segments = len(via_points) - 1
+            base = max(1, num_total // num_segments)
+            remainder = num_total - base * num_segments
+
+            gripper_traj = []
+            for i in range(num_segments):
+                # 如果某个端点缺少 gripper，则延用邻近端点的值
+                g1 = float(via_points[i][7]) if len(via_points[i]) == 8 else float(via_points[i+1][7])
+                g2 = float(via_points[i+1][7]) if len(via_points[i+1]) == 8 else float(via_points[i][7])
+                steps = base + (1 if i < remainder else 0)
+                if steps <= 1:
+                    segment = [g2]
+                else:
+                    segment = [g1 + (g2 - g1) * smoothstep(j / (steps - 1)) for j in range(steps)]
+                if i == 0:
+                    gripper_traj.extend(segment)
+                else:
+                    gripper_traj.extend(segment[1:])
         joint_spd_traj = copy.deepcopy(x_hat[:,7:])
         # return u_hat, x_hat, mu, idx_slices, tl
 
         t1 = time.time()
         self.logger.info("[LQT]完成POSE顺滑轨迹规划, "
                     f"规划用时{t1-t0: .2f}秒, 共{len(pose_traj)}个轨迹点")
+        if gripper_traj is not None:
+            return pose_traj, gripper_traj
         return pose_traj
 
     def _data_process(self, data):

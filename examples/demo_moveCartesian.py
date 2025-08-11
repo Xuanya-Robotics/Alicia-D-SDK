@@ -27,9 +27,11 @@ def teaching_demo_cartesian():
         if cmd.lower() == 'q':
             break
 
-        pose = controller.get_pose()        
-        waypoints.append(pose)
-        print(f"[记录成功] Waypoint {len(waypoints)}: {np.round(pose, 4).tolist()}")
+        pose = controller.get_pose()
+        grip = controller.get_gripper()
+        wp = pose + [grip]
+        waypoints.append(wp)
+        print(f"[记录成功] Waypoint {len(waypoints)}: pose={np.round(pose, 4).tolist()}, gripper={grip:.3f} rad")
 
     print(">>> 重新开启扭矩")
     controller.torque_control('on')

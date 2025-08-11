@@ -20,7 +20,8 @@ class TrajectoryExecutor:
                 joint_traj: List[List[float]], 
                 pose_traj: List[List[float]] = None,
                 visualize: bool = False, 
-                show_ori: bool = False):
+                show_ori: bool = False,
+                gripper_traj: List[float] = None):
         """
         执行关节角度轨迹，可选可视化
         :param joint_traj: List of joint angle lists
@@ -43,8 +44,12 @@ class TrajectoryExecutor:
             logger.info("[executor]取消执行轨迹")
             return False
         
-        for point in joint_traj:
+        for idx, point in enumerate(joint_traj):
             self.joint_controller.set_joint_angles(point)
+            if gripper_traj is not None and idx < len(gripper_traj):
+                g = gripper_traj[idx]
+                if g is not None:
+                    self.joint_controller.set_gripper(g)
             time.sleep(self.delay)
         
         if pose_traj:

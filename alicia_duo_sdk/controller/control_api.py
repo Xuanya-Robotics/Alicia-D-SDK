@@ -79,21 +79,38 @@ class ControlApi():
 
         logger.info("[moveCartesian] 开始插值末端姿态轨迹，求解关节轨迹并执行") 
 
-        # 插值末端姿态轨迹
+        # 插值末端姿态轨迹（支持可选夹爪通道）
+        gripper_waypoints = any(len(wp) == 8 for wp in waypoints)
+        start_gripper = None
+        if gripper_waypoints:
+            # 读取当前夹爪作为起点
+            start_gripper = self.get_gripper()
+
         if planner_name == 'cartesian':
-            pose_traj = planner.plan(
+            pose_plan = planner.plan(
                 start_joint_angles=start_joint_angles,
                 robot_model=self.robot_model,
-                waypoints=waypoints
+                waypoints=waypoints,
+                start_gripper=start_gripper
             )
+            if isinstance(pose_plan, tuple):
+                pose_traj, gripper_traj = pose_plan
+            else:
+                pose_traj, gripper_traj = pose_plan, None
 
         elif planner_name == 'lqt':
             p0 = self.get_pose()
+            if gripper_waypoints and start_gripper is not None:
+                p0 = p0 + [start_gripper]
             waypoints.insert(0, p0)
-            pose_traj = planner.plan(
+            pose_plan = planner.plan(
                 via_points=waypoints,
                 nbdata= 200
             )
+            if isinstance(pose_plan, tuple):
+                pose_traj, gripper_traj = pose_plan
+            else:
+                pose_traj, gripper_traj = pose_plan, None
         
         # 判断并选择 IK 解算方式
         joint_traj = self.ik_controller.solve_ik(
@@ -114,7 +131,8 @@ class ControlApi():
             joint_traj=joint_traj,
             pose_traj=pose_traj,
             visualize=visualize,
-            show_ori=show_ori)
+            show_ori=show_ori,
+            gripper_traj=gripper_traj)
 
     def moveJ(
         self,

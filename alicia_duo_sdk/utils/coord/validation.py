@@ -33,7 +33,8 @@ def validate_waypoints(waypoints: List[List[float]]):
     验证路径点序列是否合法
 
     Args:
-        waypoints: List of pose vectors，每个为 [x, y, z, qx, qy, qz, qw]
+        waypoints: List of pose vectors，每个为 [x, y, z, qx, qy, qz, qw]，
+                   或包含夹爪的 [x, y, z, qx, qy, qz, qw, gripper]
 
     Raises:
         TypeError, ValueError
@@ -44,12 +45,21 @@ def validate_waypoints(waypoints: List[List[float]]):
     for idx, pose in enumerate(waypoints):
         if not isinstance(pose, list):
             raise TypeError(f"第 {idx+1} 个路径点不是列表: {pose}")
-        if len(pose) != 7:
-            raise ValueError(f"第 {idx+1} 个路径点长度不是 7：{pose}")
+
+        if len(pose) not in (7, 8):
+            raise ValueError(f"第 {idx+1} 个路径点长度不是 7 或 8：{pose}")
+
         try:
-            validate_pose(pose)
+            # 前 7 维始终是位姿
+            validate_pose(pose[:7])
         except Exception as e:
             raise ValueError(f"第 {idx+1} 个路径点内容非法: {e}")
+
+        if len(pose) == 8:
+            # 第 8 个为夹爪角度（弧度），仅做数值检查
+            gr = pose[7]
+            if not isinstance(gr, (int, float)):
+                raise ValueError(f"第 {idx+1} 个路径点的夹爪值不是数值: {gr}")
 
 
 

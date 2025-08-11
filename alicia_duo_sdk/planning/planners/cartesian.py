@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Optional, Tuple
 import numpy as np
 from scipy.spatial.transform import Rotation as R, Slerp
 from alicia_duo_sdk.kinematics import AliciaFollower
@@ -16,7 +16,8 @@ class CartesianPlanner:
             start_joint_angles: List[float],
             robot_model: AliciaFollower,
             waypoints: List[List[float]],
-            ) -> List[List[float]]:
+            start_gripper: Optional[float] = None,
+            ) -> Union[List[List[float]], Tuple[List[List[float]], List[Optional[float]]]]:
         """
         输入一系列末端姿态点，依次插值每段轨迹，返回插值后的末端轨迹
         """
@@ -24,25 +25,46 @@ class CartesianPlanner:
         
         t0 = time.time()   
         pose_traj = []
+        gripper_traj = []  # 可选夹爪轨迹（与 pose_traj 对齐）
 
         cur_pose = np.concatenate(robot_model.forward_kinematics(start_joint_angles)).tolist()
+        # 如果 waypoints 含 8 维（带夹爪），将起点夹爪设为当前夹爪不可得，这里用 None 占位
+        # 仅用于步数与对齐，真正的夹爪起点由上层决定是否插入
         all_points = [cur_pose] + waypoints  # 加入起点
 
         # 对waypoints的每两个点之间插值
         for i in range(len(all_points) - 1):
-            p1, p2 = np.array(all_points[i]), np.array(all_points[i + 1])
+            p1_raw, p2_raw = all_points[i], all_points[i + 1]
+            p1 = np.array(p1_raw[:7])
+            p2 = np.array(p2_raw[:7])
             steps = self._estimate_steps_between_poses(p1, p2)
             interp_poses = self.interpolate_pose_trajectory(p1, p2, num_steps=steps)
+
+            # 夹爪插值（如果提供了第8维）
+            if len(p2_raw) == 8 and (len(p1_raw) == 8 or start_gripper is not None):
+                g1 = float(p1_raw[7]) if len(p1_raw) == 8 else float(start_gripper)
+                g2 = float(p2_raw[7])
+                if steps <= 1:
+                    interp_gr = [g2]
+                else:
+                    interp_gr = [g1 + (g2 - g1) * self.smoothstep(j / (steps - 1)) for j in range(steps)]
+            else:
+                interp_gr = [None] * steps
                
             if i == 0:
                 pose_traj.extend(interp_poses)
+                gripper_traj.extend(interp_gr)
             else:
                 pose_traj.extend(interp_poses[1:])
+                gripper_traj.extend(interp_gr[1:])
         
         t1 = time.time()
         self.logger.info("[CartesianPlanner]完成POSE轨迹插值规划, "
                     f"规划用时{t1-t0: .2f}, 共{len(pose_traj)}个轨迹点")
         
+        # 如果未提供夹爪数据，则返回纯位姿轨迹；否则返回 (pose_traj, gripper_traj)
+        if any(g is not None for g in gripper_traj):
+            return pose_traj, gripper_traj
         return pose_traj    
 
     def _estimate_steps_between_poses(self, 
