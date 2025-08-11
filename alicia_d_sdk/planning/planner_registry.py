@@ -1,13 +1,13 @@
 # planner_registry.py
 
 from importlib import import_module
-from alicia_duo_sdk.utils.logger import beauty_print
+from alicia_d_sdk.utils.logger import beauty_print
 
 # 名称映射到模块路径（不包含 .py）
 _PLANNERS = {
-    "linear": "alicia_duo_sdk.planning.planners.linear",
-    "cartesian": "alicia_duo_sdk.planning.planners.cartesian",
-    "lqt": "alicia_duo_sdk.planning.planners.lqt"
+    "linear": "alicia_d_sdk.planning.planners.linear",
+    "cartesian": "alicia_d_sdk.planning.planners.cartesian",
+    "lqt": "alicia_d_sdk.planning.planners.lqt"
     # 未来支持："lspb": "planners.lspb", "moveit": "planners.moveit_planner"
 }
 

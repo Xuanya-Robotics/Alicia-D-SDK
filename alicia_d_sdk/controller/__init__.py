@@ -5,11 +5,11 @@ Controller module for motion planning and execution
 """
 
 from .session_factory import get_default_session
-from .control_api import ControlApi
+from .control_api import SynriaControlAPI
 from .motion_session import MotionSession
 
 __all__ = [
     "get_default_session",
-    "ControlApi",
+    "SynriaControlAPI",
     "MotionSession"
 ]

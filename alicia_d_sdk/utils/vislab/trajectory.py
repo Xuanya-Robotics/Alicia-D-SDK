@@ -1,9 +1,9 @@
-# alicia_duo_sdk/utils/visualization/trajectory_plot.py
+# alicia_d_sdk/utils/visualization/trajectory_plot.py
 
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import List, Optional
-from alicia_duo_sdk.utils.coord import quaternion_to_matrix
+from alicia_d_sdk.utils.coord import quaternion_to_matrix
 from ..logger import BeautyLogger
 
 logger = BeautyLogger(log_dir="./logs", log_name="plot.log", verbose=True)

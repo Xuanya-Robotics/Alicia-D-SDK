@@ -1,9 +1,9 @@
-# alicia_duo_sdk/planning/planners/lqt.py
+# alicia_d_sdk/planning/planners/lqt.py
 
 import numpy as np
 from typing import List, Tuple
 from math import factorial
-from alicia_duo_sdk.utils.logger import BeautyLogger
+from alicia_d_sdk.utils.logger import BeautyLogger
 import copy 
 import time 
 

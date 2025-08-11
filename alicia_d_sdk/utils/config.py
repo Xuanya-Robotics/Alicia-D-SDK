@@ -1,4 +1,4 @@
-# alicia_duo_sdk/utils/config.py
+# alicia_d_sdk/utils/config.py
 
 import os
 from omegaconf import OmegaConf

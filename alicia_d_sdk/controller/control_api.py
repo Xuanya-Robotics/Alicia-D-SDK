@@ -16,7 +16,8 @@ import platform
 
 logger = BeautyLogger(log_dir="./logs", log_name="move.log", verbose=True)
 
-class ControlApi():
+
+class SynriaControlAPI():
     def __init__(self, session:MotionSession):
         # 控制器
         self.session = session
@@ -292,6 +293,122 @@ class ControlApi():
             joint_traj=joint_traj,
             visualize=visualize
         )
+
+    def moveJ_online(
+        self,
+        joint_format: str = 'rad',
+        target_joints: List[float] = None,
+        command_rate_hz: float = 200.0,
+        max_joint_velocity_rad_s: float = 2.5,
+        max_joint_accel_rad_s2: float = 8.0,
+        arrival_tolerance_rad: float = 0.01,
+        settle_time: float = 0.2,
+        timeout: float = 10.0,
+        stop_after: bool = True
+    ) -> bool:
+        """
+        基于在线插值器（梯形速度剖面）执行关节空间 MoveJ，自动等待到位。
+
+        :param joint_format, str: 输入角度单位，可选 'rad' 或 'deg'
+        :param target_joints, List[float]: 目标关节角度（长度6）
+        :param command_rate_hz, float: 在线插值发送频率（Hz）
+        :param max_joint_velocity_rad_s, float: 关节最大速度（rad/s）
+        :param max_joint_accel_rad_s2, float: 关节最大加速度（rad/s^2）
+        :param arrival_tolerance_rad, float: 判定到位的关节最大误差阈值（rad）
+        :param settle_time, float: 误差持续小于阈值的判稳时间（s）
+        :param timeout, float: 整体超时时间（s）
+        :param stop_after, bool: 执行完成后是否自动停止在线插值线程
+        :return: bool: 是否在超时前到位
+        """
+        logger.module("[moveJ_online] 基于在线插值器执行 MoveJ")
+
+        if target_joints is None:
+            raise ValueError("[moveJ_online] 请提供 target_joints 参数")
+
+        unit = 'rad'
+        jf = (joint_format or 'rad').lower()
+        if jf not in ['rad', 'deg']:
+            raise ValueError(f"[moveJ_online] 不支持的 joint_format: '{joint_format}'，应为 'rad' 或 'deg'")
+        if jf == 'deg':
+            # Convert degree to radian
+            target_joints = [a * self.joint_controller.DEG_TO_RAD for a in target_joints]
+            unit = 'deg'
+
+        validate_joint_list(target_joints)
+
+        # Enforce joint limits
+        target_joints, violations = check_and_clip_joint_limits(
+            joints=target_joints,
+            joint_limits=self.robot_model.joint_limit
+        )
+        for joint_name, original, clipped in violations:
+            logger.warning(
+                f"[moveJ_online] {joint_name} 超出限制：{original:.2f} -> 已截断为 {clipped:.2f}"
+            )
+
+        # Start or update online interpolator
+        self._online.update_params(
+            command_rate_hz=command_rate_hz,
+            max_joint_velocity_rad_s=max_joint_velocity_rad_s,
+            max_joint_accel_rad_s2=max_joint_accel_rad_s2,
+        )
+        if not self._online_running:
+            self._online.start()
+            self._online_running = True
+
+        # Push target and wait for arrival
+        self._online.set_target(target_joints)
+
+        start_time = time.time()
+        within_since = None
+        arrived = False
+
+        # Use a modest polling period relative to command rate
+        poll_dt = max(0.002, 1.0 / max(50.0, command_rate_hz))
+
+        while True:
+            now = time.time()
+            if now - start_time > timeout:
+                logger.warning("[moveJ_online] 等待到位超时")
+                break
+
+            # Read current joints and evaluate max error
+            cur = self.joint_controller.get_joint_angles()
+            if not cur or len(cur) != 6:
+                time.sleep(poll_dt)
+                continue
+
+            max_err = max(abs(t - c) for t, c in zip(target_joints, cur))
+
+            if max_err <= arrival_tolerance_rad:
+                if within_since is None:
+                    within_since = now
+                # Stay within tolerance for settle_time
+                if now - within_since >= settle_time:
+                    arrived = True
+                    logger.info("[moveJ_online] 关节已到位并稳定")
+                    break
+            else:
+                # Reset stable window when error rises
+                within_since = None
+
+            time.sleep(poll_dt)
+
+        if stop_after and self._online_running:
+            try:
+                self._online.stop()
+            finally:
+                self._online_running = False
+
+        # Pretty log for display unit
+        if unit == 'deg':
+            display_target = [round(a * self.joint_controller.RAD_TO_DEG, 1) for a in target_joints]
+            logger.info(f"[moveJ_online] 目标角度(°): {display_target}")
+        else:
+            display_target = [round(a, 3) for a in target_joints]
+            logger.info(f"[moveJ_online] 目标角度(rad): {display_target}")
+
+        return arrived
 
     def moveHome(self):
         '''

@@ -1,4 +1,4 @@
-// filepath: /home/ubuntu/Alicia_duo_sdk/.gitignore
+// filepath: /home/ubuntu/alicia_d_sdk/.gitignore
 # Python
 __pycache__/
 *.pyc

@@ -3,7 +3,7 @@ import numpy as np
 from typing import Dict, List, Tuple, Union
 from .robot_model import AliciaFollower
 from ..utils.logger import BeautyLogger
-from scipy.spatial.transform import Rotation as R
+# Note: Avoid heavy SciPy Rotation in hot loops; use lightweight quaternion ops instead
 
 logger = BeautyLogger(log_dir="./logs", log_name="ik.log", verbose=False)
 
@@ -73,16 +73,8 @@ class Advanced6DOFIKSolver:
         Returns:
             np.ndarray: 3D 姿态误差向量
         """
-        q_target = R.from_quat(target_quat)
-        q_current = R.from_quat(current_quat)
-        q_error = q_target * q_current.inv()
-
-        angle = q_error.magnitude()
-        if angle < 1e-6:
-            return np.zeros(3)
-
-        axis = q_error.as_rotvec()  # axis * angle
-        return axis
+        q_error = self._quat_multiply(target_quat, self._quat_conjugate(current_quat))
+        return self._quat_log_axis_angle(q_error)
 
     def _compute_6dof_jacobian(self, angles: Dict[str, float]) -> np.ndarray:
         """
@@ -114,16 +106,10 @@ class Advanced6DOFIKSolver:
         """
         使用姿态扰动计算角速度近似
         """
-        q_pos = R.from_quat(quat_pos)
-        q_neg = R.from_quat(quat_neg)
-        q_base = R.from_quat(base_quat)
-
-        rel_pos = q_pos * q_base.inv()
-        rel_neg = q_neg * q_base.inv()
-
-        w_pos = rel_pos.as_rotvec()
-        w_neg = rel_neg.as_rotvec()
-
+        rel_pos = self._quat_multiply(quat_pos, self._quat_conjugate(base_quat))
+        rel_neg = self._quat_multiply(quat_neg, self._quat_conjugate(base_quat))
+        w_pos = self._quat_log_axis_angle(rel_pos)
+        w_neg = self._quat_log_axis_angle(rel_neg)
         return (w_pos - w_neg) / (2 * epsilon)
 
     def _compute_delta_angles(self, J: np.ndarray, error_vector: np.ndarray) -> np.ndarray:
@@ -136,37 +122,65 @@ class Advanced6DOFIKSolver:
         JT = J.T
         JJT = J @ JT + lambda_ * np.eye(6)
 
+        # 使用高性能的线性求解器代替手写矩阵求逆
         try:
-            JJT_inv = self._invert_6x6_matrix(JJT)
+            temp = np.linalg.solve(JJT, error_vector)
         except np.linalg.LinAlgError:
-            logger.warning("[IK] JJT 不可逆，使用简化近似")
+            logger.warning("[IK] JJT 奇异或病态，回退到简化近似")
             return JT @ error_vector * 0.1
 
-        temp = JJT_inv @ error_vector
         delta_angles = JT @ temp
         return delta_angles
 
-    def _invert_6x6_matrix(self, A: np.ndarray) -> np.ndarray:
+    # -------------------------
+    # Lightweight quaternion ops
+    # Convention: quaternion is [x, y, z, w]
+    # -------------------------
+    def _quat_conjugate(self, q: np.ndarray) -> np.ndarray:
         """
-        高斯-约旦法求 6x6 矩阵逆
+        :param q, np.ndarray: [x, y, z, w]
+        :return: np.ndarray
         """
-        A = A.astype(np.float64)
-        n = 6
-        I = np.eye(n)
-        aug = np.hstack((A, I))
+        return np.array([-q[0], -q[1], -q[2], q[3]], dtype=float)
 
-        for i in range(n):
-            max_row = np.argmax(np.abs(aug[i:, i])) + i
-            if aug[max_row, i] == 0:
-                raise np.linalg.LinAlgError("矩阵不可逆")
-            aug[[i, max_row]] = aug[[max_row, i]]
-            aug[i] = aug[i] / aug[i, i]
+    def _quat_multiply(self, q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+        """
+        :param q1, np.ndarray: [x, y, z, w]
+        :param q2, np.ndarray: [x, y, z, w]
+        :return: np.ndarray
+        """
+        x1, y1, z1, w1 = q1
+        x2, y2, z2, w2 = q2
+        w = w1 * w2 - (x1 * x2 + y1 * y2 + z1 * z2)
+        x = w1 * x2 + w2 * x1 + (y1 * z2 - z1 * y2)
+        y = w1 * y2 + w2 * y1 + (z1 * x2 - x1 * z2)
+        z = w1 * z2 + w2 * z1 + (x1 * y2 - y1 * x2)
+        return np.array([x, y, z, w], dtype=float)
 
-            for j in range(n):
-                if j != i:
-                    aug[j] = aug[j] - aug[j, i] * aug[i]
+    def _quat_log_axis_angle(self, q: np.ndarray) -> np.ndarray:
+        """
+        Map unit quaternion to axis-angle vector v where ||v|| = angle, direction = axis.
+        :param q, np.ndarray: [x, y, z, w]
+        :return: np.ndarray: [vx, vy, vz]
+        """
+        # Ensure unit length and consistent hemisphere
+        q = q.astype(float)
+        norm = np.linalg.norm(q)
+        if norm == 0.0:
+            return np.zeros(3)
+        q = q / norm
+        if q[3] < 0.0:
+            q = -q
+        w = float(np.clip(q[3], -1.0, 1.0))
+        angle = 2.0 * np.arccos(abs(w))
+        s = np.sqrt(max(1e-16, 1.0 - w * w))
+        if angle < 1e-6:
+            # Small-angle approximation
+            return 2.0 * q[:3]
+        axis = q[:3] / s
+        return axis * angle
 
-        return aug[:, n:]
+    # 旧版手写矩阵求逆已废弃，改用 np.linalg.solve 在 _compute_delta_angles 中直接求解
     
     def _compute_adaptive_step_size(self, pos_error: float, ori_error: float) -> float:
         """

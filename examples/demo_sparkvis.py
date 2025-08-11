@@ -26,13 +26,13 @@ except Exception as e:
     print("请先安装 websockets: pip install websockets")
     raise
 
-from alicia_duo_sdk.controller import get_default_session, ControlApi
+from alicia_d_sdk.controller import get_default_session, SynriaControlAPI
 
 
 class SparkVisBridge:
     def __init__(
         self,
-        controller: ControlApi,
+        controller: SynriaControlAPI,
         host: str = "localhost",
         port: int = 8765,
         output_file: Optional[str] = None,
@@ -288,7 +288,7 @@ def main():
 
     # 创建会话与控制器
     session = get_default_session(port=args.serial_port, baudrate=args.baudrate)
-    controller = ControlApi(session=session)
+    controller = SynriaControlAPI(session=session)
 
     try:
         # 尝试开启力矩（安全起见）

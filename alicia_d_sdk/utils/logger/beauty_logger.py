@@ -101,7 +101,7 @@ def beauty_print(content, type: str = None):
 
     Example::
 
-        >>> from alicia_duo_sdk.utils.logger import beauty_print
+        >>> from alicia_d_sdk.utils.logger import beauty_print
         >>> beauty_print("This is a warning message.", type="warning")
 
     :param content: the content to be printed

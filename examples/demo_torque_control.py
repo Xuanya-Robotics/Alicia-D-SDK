@@ -2,12 +2,12 @@
 Demo: 扭矩开关示例
 '''
 
-from alicia_duo_sdk.controller import get_default_session, ControlApi
+from alicia_d_sdk.controller import get_default_session, SynriaControlAPI
 
 def main():
     # 导入会话和控制器
     session = get_default_session()
-    controller = ControlApi(session=session)
+    controller = SynriaControlAPI(session=session)
 
     try:
         # 关闭机械臂扭矩 （注意安全）

@@ -1,6 +1,6 @@
 # 安装指南
 
-本指南将引导您完成 Alicia Duo SDK 的安装与运行环境配置。
+本指南将引导您完成 Alicia-D SDK 的安装与运行环境配置。
 
 ---
 
@@ -22,8 +22,8 @@ cd Alicia-D-SDK
 ### 2. 创建 Python 环境并安装依赖
 使用 Conda 环境（推荐）：
 ```bash
-conda create -n alicia_duo_sdk python=3.8
-conda activate alicia_duo_sdk
+conda create -n alicia_d_sdk python=3.8
+conda activate alicia_d_sdk
 ```
 
 安装依赖与 SDK：
@@ -78,4 +78,4 @@ python3 demo_read_state.py
 
 ---
 
-安装成功后，即可通过 `ControlApi` 接口控制机械臂完成各种动作。
+安装成功后，即可通过 `SynriaControlAPI` 接口控制机械臂完成各种动作。
