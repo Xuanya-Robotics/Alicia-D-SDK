@@ -6,6 +6,7 @@ from ..utils.coord import check_and_clip_joint_limits, compute_steps_and_delay
 from ..planning.planners import *
 
 from .motion_session import MotionSession
+from .online_interpolator import OnlineJointInterpolator
 
 from typing import List, Union
 import numpy as np
@@ -33,6 +34,72 @@ class ControlApi():
         self.home_angles = [0.0] * 6
         self.home_pose = [0.3086, -0.0025, 0.0890,  # x, y, z
                           0.0029, 0.9310, -0.0028, 0.3649]  # x, y, z ,w
+
+        # 在线插值器（ROS风格梯形速度剖面）
+        self._online = OnlineJointInterpolator(
+            joint_controller=self.joint_controller,
+            command_rate_hz=200.0,
+            max_joint_velocity_rad_s=2.5,
+            max_joint_accel_rad_s2=8.0,
+            max_gripper_velocity_rad_s=1.5,
+            max_gripper_accel_rad_s2=10.0,
+        )
+        self._online_running = False
+
+    def startOnlineSmoothing(self,
+                             command_rate_hz: float = 200.0,
+                             max_joint_velocity_rad_s: float = 2.5,
+                             max_joint_accel_rad_s2: float = 8.0,
+                             max_gripper_velocity_rad_s: float = 1.5,
+                             max_gripper_accel_rad_s2: float = 10.0):
+        """
+        启动后台在线插值线程（ROS风格梯形速度剖面），用于稀疏目标（如30Hz）平滑执行。
+
+        :param command_rate_hz, float: 后台控制频率
+        :param max_joint_velocity_rad_s, float: 关节最大速度
+        :param max_joint_accel_rad_s2, float: 关节最大加速度
+        :param max_gripper_velocity_rad_s, float: 夹爪最大速度
+        :param max_gripper_accel_rad_s2, float: 夹爪最大加速度
+        :return: None
+        """
+        self._online.update_params(
+            command_rate_hz=command_rate_hz,
+            max_joint_velocity_rad_s=max_joint_velocity_rad_s,
+            max_joint_accel_rad_s2=max_joint_accel_rad_s2,
+            max_gripper_velocity_rad_s=max_gripper_velocity_rad_s,
+            max_gripper_accel_rad_s2=max_gripper_accel_rad_s2,
+        )
+        self._online.start()
+        self._online_running = True
+
+    def stopOnlineSmoothing(self):
+        """
+        停止后台在线插值线程。
+
+        :param None: 
+        :return: None
+        """
+        if self._online_running:
+            self._online.stop()
+            self._online_running = False
+
+    def setJointTargetOnline(self, joints: list):
+        """
+        设置在线插值的最新关节目标（rad，len=6）。
+
+        :param joints, list: 6关节角(rad)
+        :return: None
+        """
+        self._online.set_target(joints)
+
+    def setGripperTargetOnline(self, angle_rad: float):
+        """
+        设置在线插值的夹爪目标（rad）。
+
+        :param angle_rad, float: 夹爪目标(rad)
+        :return: None
+        """
+        self._online.set_gripper_target_rad(angle_rad)
 
     def moveCartesian(
         self,

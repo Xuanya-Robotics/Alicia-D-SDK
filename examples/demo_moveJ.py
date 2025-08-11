@@ -1,5 +1,5 @@
 """
-Demo: 使用 moveJ 控制机械臂移动到目标关节位置
+Demo: 使用 moveJ 控制机械臂移动到目标关节位置，已包含关节角线性插值
 """
 
 from alicia_duo_sdk.controller import get_default_session, ControlApi
@@ -20,8 +20,8 @@ def main():
         controller.moveJ(
             joint_format='deg',              # 角度单位，可选 'rad' 或 'deg'
             target_joints=target_joints_deg,
-            speed_factor=0.8,                # 控制速度（1.0 = 默认速度）
-            visualize=True                  # 可视化轨迹
+            speed_factor=1,                # 控制速度（1.0 = 默认速度）
+            visualize=False                  # 可视化轨迹
         )
 
         # 移动到初始位置

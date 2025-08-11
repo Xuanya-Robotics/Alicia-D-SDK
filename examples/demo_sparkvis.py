@@ -69,6 +69,19 @@ class SparkVisBridge:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
+        # 启动在线插值（ROS风格梯形速度剖面），适配稀疏UI指令
+        try:
+            self.controller.startOnlineSmoothing(
+                command_rate_hz=200.0,
+                max_joint_velocity_rad_s=2.5,
+                max_joint_accel_rad_s2=8.0,
+                max_gripper_velocity_rad_s=1.5,
+                max_gripper_accel_rad_s2=10.0,
+            )
+            print("[Online] 已启动后台在线插值 (200Hz)")
+        except Exception as e:
+            print(f"[Online] 启动在线插值失败: {e}")
+
     # ---------- Utilities ----------
     def _signal_handler(self, signum, frame):
         print(f"[Exit] 收到信号 {signum}，正在优雅关闭...")
@@ -85,6 +98,12 @@ class SparkVisBridge:
                 print(f"[Log] 关闭CSV失败: {e}")
             finally:
                 self.file_handle = None
+        # 关闭在线插值
+        try:
+            self.controller.stopOnlineSmoothing()
+            print("[Online] 在线插值已停止")
+        except Exception:
+            pass
 
     @staticmethod
     def _now_str(ts: Optional[float] = None) -> str:
@@ -123,12 +142,14 @@ class SparkVisBridge:
                 float(joint_values.get('joint5', 0.0)),
                 float(joint_values.get('joint6', 0.0)),
             ]
-            self.controller.joint_controller.set_joint_angles(joints)
+            # 走在线插值目标设定（后台200Hz平滑执行）
+            self.controller.setJointTargetOnline(joints)
 
             if 'gripper' in joint_values:
                 pct = max(0.0, min(1.0, float(joint_values['gripper'])))
                 gripper_deg = pct * 100.0
-                self.controller.gripper_control(angle_deg=gripper_deg, wait_for_completion=False)
+                gripper_rad = gripper_deg * self.controller.joint_controller.DEG_TO_RAD
+                self.controller.setGripperTargetOnline(gripper_rad)
 
             # logging (UI source)
             if self.file_handle and self.log_source in ("ui", "both"):
