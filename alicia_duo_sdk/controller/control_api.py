@@ -10,6 +10,7 @@ from .motion_session import MotionSession
 from typing import List, Union
 import numpy as np
 import time, sys, select
+import platform
 
 
 logger = BeautyLogger(log_dir="./logs", log_name="move.log", verbose=True)
@@ -351,7 +352,28 @@ class ControlApi():
                 while True:
                     _print_once()
                     time.sleep(0.5)  # 打印间隔（可调）
-                    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                    
+                    # 跨平台兼容的输入检测
+                    if platform.system() == "Windows":
+                        # Windows系统使用msvcrt模块检测按键
+                        try:
+                            import msvcrt
+                            if msvcrt.kbhit():
+                                key = msvcrt.getch()
+                                if key == b'\r' or key == b'\n':  # Enter键
+                                    logger.module("[print_state] 持续打印已停止")
+                                    break
+                        except ImportError:
+                            # 如果msvcrt不可用，使用简单的input()等待
+                            try:
+                                input("按Enter键停止打印: ")
+                                logger.module("[print_state] 持续打印已停止")
+                                break
+                            except:
+                                pass
+                    else:
+                        # Unix/Linux系统使用select
+                        if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
                             input()  # 停止读取
                             logger.module("[print_state] 持续打印已停止")
                             break
