@@ -1,4 +1,5 @@
 import serial
+import platform
 import serial.tools.list_ports
 import time
 import logging
@@ -69,24 +70,42 @@ class SerialComm:
             if self.serial_port and self.serial_port.is_open:
                 self.serial_port.close()
             
-            # 检查串口是否是cu.usbserial，该串口通常为macOS
+            # macOS: Prefer /dev/cu.* (callout) over /dev/tty.* to avoid write blocking
+            if '/dev/tty.' in port:
+                cu_candidate = port.replace('/dev/tty.', '/dev/cu.')
+                if os.path.exists(cu_candidate) and os.access(cu_candidate, os.R_OK | os.W_OK):
+                    logger.info(f"检测到 macOS 端口 {port}，将优先切换为 {cu_candidate} 用于写入")
+                    port = cu_candidate
+
+            # Do not force-change baudrate on macOS. Keep user/default and only log.
             if 'cu.usbserial' in port:
+                logger.info(f"当前波特率为 {self.baudrate}，如通信异常可尝试 921600/1000000/115200")
 
-                # 检查波特率是否为macOS所能识别的
-                if self.baudrate == self.baudrate_default:
-                    self.baudrate = self.baudrate_macOS # 更改为macOS能识别的波特率1000000
-                    logger.info(f"将波特率从默认 {self.baudrate_default} 调整为macOS所能识别的 {self.baudrate_macOS}")
-
-                # 如果有指定波特率则不做更改，只log出来
-                else:
-                    logger.info(f"当前指定波特率为 {self.baudrate}, 该波特率macOS可能不能识别")
-
-            # 设置串口参数
+            # Serial parameters: add write timeout and disable flow control
             self.serial_port = serial.Serial(
                 port=port,
                 baudrate=self.baudrate,
-                timeout=self.timeout
+                timeout=self.timeout,
+                write_timeout=self.timeout,
+                xonxoff=False,
+                rtscts=False,
+                dsrdtr=False
             )
+            try:
+                # Ensure buffers and handshake lines are in a sane state
+                self.serial_port.reset_input_buffer()
+                self.serial_port.reset_output_buffer()
+                try:
+                    # Keep DTR asserted; some controllers ignore TX when DTR is low
+                    self.serial_port.setDTR(True)
+                except Exception:
+                    pass
+                try:
+                    self.serial_port.setRTS(False)
+                except Exception:
+                    pass
+            except Exception:
+                pass
             
             if self.serial_port.is_open:
                 logger.info("串口连接成功")
@@ -140,31 +159,35 @@ class SerialComm:
         if not ports:
             return ""
 
-        
-        # 尝试找到可用的设备
-        for port in ports:
-            #尝试找到可用的ttyUSB设备
-            if "ttyUSB" in port.device:
-                if os.access(port.device, os.R_OK | os.W_OK):
+        # Device priority:
+        # 1) macOS: /dev/cu.usbserial*, /dev/cu.usbmodem*, /dev/cu.SLAB_USBtoUART*, /dev/cu.wchusbserial*
+        # 2) Linux: /dev/ttyUSB*
+        # 3) Windows: COM*
+        candidates_priority = [
+            "cu.wchusbserial", "cu.SLAB_USBtoUART", "cu.usbserial", "cu.usbmodem",
+            "ttyUSB", "COM"
+        ]
+
+        # Pass 1: strictly match priority keys
+        for key in candidates_priority:
+            for p in ports:
+                if key in p.device and os.access(p.device, os.R_OK | os.W_OK):
                     if should_log:
-                        logger.info(f"找到可用设备: {port.device}")
-                    return port.device
-                
-            #尝试找到可用的cu.usbserial设备
-            elif "cu.usbserial" in port.device:
-                if os.access(port.device, os.R_OK | os.W_OK):
+                        logger.info(f"找到可用设备: {p.device}")
+                    return p.device
+
+        # Pass 2: if only /dev/tty.* is present, try map to /dev/cu.*
+        for p in ports:
+            dev = p.device
+            if dev.startswith('/dev/tty.'):
+                cu_candidate = dev.replace('/dev/tty.', '/dev/cu.')
+                if os.path.exists(cu_candidate) and os.access(cu_candidate, os.R_OK | os.W_OK):
                     if should_log:
-                        logger.info(f"找到可用设备: {port.device}")
-                    return port.device
-           
-            #尝试找到可用的COM设备
-            elif "COM" in port.device:
-                if os.access(port.device, os.R_OK | os.W_OK):
-                    if should_log:
-                        logger.info(f"找到可用设备: {port.device}")
-                    return port.device
+                        logger.info(f"将 {dev} 映射为 {cu_candidate}")
+                    return cu_candidate
+
         if should_log:
-            logger.warning("未找到可用的ttyUSB或者cu.usbserial设备")
+            logger.warning("未找到可用的串口设备（支持 cu.usbserial/cu.usbmodem/ttyUSB/COM）")
         return ""
     
     def send_data(self, data: List[int]) -> bool:
@@ -190,6 +213,10 @@ class SerialComm:
                 
                 # 写入数据
                 bytes_written = self.serial_port.write(data_bytes)
+                try:
+                    self.serial_port.flush()
+                except Exception:
+                    pass
                 
                 if bytes_written != len(data):
                     logger.warning(f"只写入了 {bytes_written} 字节，应为 {len(data)} 字节")
