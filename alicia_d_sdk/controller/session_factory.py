@@ -10,7 +10,7 @@ logger = BeautyLogger(log_dir="./logs", log_name="session.log", verbose=True)
 
 def get_default_session(
     port: str = '',        
-    baudrate: int = 921600,
+    baudrate: int = 1000000,
     debug: bool = False,
     connect_timeout: float = 5.0
 ) -> MotionSession:
@@ -19,7 +19,7 @@ def get_default_session(
 
     Args:
         port (str): 指定串口（留空自动查找）
-        baudrate (int): 波特率（默认 921600）
+        baudrate (int): 波特率（默认 1000000）
         debug (bool): 是否开启调试日志
         connect_timeout (float): 连接机械臂的超时时间
 

@@ -34,7 +34,7 @@ class ArmController:
     CMD_MULTI_ARM = 0x06   # 四机械臂角度反馈与控制
     CMD_TORQUE = 0x13      # 机械臂力矩控制
     
-    def __init__(self, port: str = "", baudrate: int = 921600, debug_mode: bool = False):
+    def __init__(self, port: str = "", baudrate: int = 1000000, debug_mode: bool = False):
         """
         初始化机械臂控制器
         
