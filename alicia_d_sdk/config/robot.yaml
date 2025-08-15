@@ -1,0 +1,24 @@
+model_name: Alicia_D_v5_4
+dof: 6
+joint_names: [Joint1, Joint2, Joint3, Joint4, Joint5, Joint6]
+limits:
+  position:
+    lower: [-2.16, -1.57, -0.5, -3.14, -1.57, -3.14]
+    upper: [ 2.16,  1.57,  2.35619,  3.14,  1.5,   3.14]
+  velocity: [5, 5, 5, 5, 5, 5]
+  acceleration: [4.0, 4.0, 4.0, 4.0, 4.0, 4.0]
+  jerk: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
+control_modes: [position, cartesian]
+features: [io, gripper]
+rates:
+  control_rate_hz: 200
+  state_rate_hz: 100
+frames:
+  base: base_link
+  tool0: tool0
+  tcp_offset: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+comm:
+  port: ""
+  baudrate: 1000000
+  debug: false
+

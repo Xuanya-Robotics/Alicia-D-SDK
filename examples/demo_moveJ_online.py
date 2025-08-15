@@ -28,10 +28,10 @@ def main():
             joint_format='deg',                 # 'rad' or 'deg'
             target_joints=target_joints_deg,    # target joints
             command_rate_hz=200.0,              # control loop frequency
-            max_joint_velocity_rad_s=1.5,       # joint velocity limit
-            max_joint_accel_rad_s2=6.0,         # joint acceleration limit
+            max_joint_velocity_rad_s=3,       # joint velocity limit
+            max_joint_accel_rad_s2=1,         # joint acceleration limit
             arrival_tolerance_rad=0.02,         # arrival tolerance (rad)
-            settle_time=0.2,                    # stabilize duration (s)
+            settle_time=10,                    # stabilize duration (s)
             timeout=8.0,                        # overall timeout (s)
             stop_after=True                     # auto stop background thread
         )
@@ -44,10 +44,10 @@ def main():
             joint_format='deg',
             target_joints=target_joints_deg_2,
             command_rate_hz=200.0,
-            max_joint_velocity_rad_s=1.8,
-            max_joint_accel_rad_s2=7.0,
+            max_joint_velocity_rad_s=3,
+            max_joint_accel_rad_s2=1,
             arrival_tolerance_rad=0.02,
-            settle_time=0.2,
+            settle_time=10,
             timeout=8.0,
             stop_after=True
         )

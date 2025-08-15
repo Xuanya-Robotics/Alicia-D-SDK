@@ -17,7 +17,7 @@ DEFAULT_LENGTH = 5
 class SerialComm:
     """机械臂串口通信模块 - 简化版"""
     
-    def __init__(self, lock: threading.Lock, port: str = "", baudrate: int = 921600, 
+    def __init__(self, lock: threading.Lock, port: str = "", baudrate: int = 1000000,
                 timeout: float = 1.0, debug_mode: bool = False):
         """
         初始化串口通信模块
