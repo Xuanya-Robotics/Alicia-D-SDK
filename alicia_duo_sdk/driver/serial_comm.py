@@ -159,14 +159,23 @@ class SerialComm:
         if not ports:
             return ""
 
-        # Device priority:
-        # 1) macOS: /dev/cu.usbserial*, /dev/cu.usbmodem*, /dev/cu.SLAB_USBtoUART*, /dev/cu.wchusbserial*
-        # 2) Linux: /dev/ttyUSB*
-        # 3) Windows: COM*
-        candidates_priority = [
-            "cu.wchusbserial", "cu.SLAB_USBtoUART", "cu.usbserial", "cu.usbmodem",
-            "ttyUSB", "COM"
-        ]
+        # Device priority based on platform
+        if platform.system() == "Darwin":  # macOS
+            # macOS: prefer cu.* devices to avoid write blocking
+            candidates_priority = [
+                "cu.wchusbserial", "cu.SLAB_USBtoUART", "cu.usbserial", "cu.usbmodem",
+                "ttyUSB", "COM"
+            ]
+        elif platform.system() == "Linux":  # Ubuntu/Linux
+            # Linux: prefer ttyUSB devices
+            candidates_priority = [
+                "ttyUSB", "ttyACM", "cu.wchusbserial", "cu.SLAB_USBtoUART",
+                "cu.usbserial", "cu.usbmodem", "COM"
+            ]
+        else:  # Windows and others
+            candidates_priority = [
+                "COM", "ttyUSB", "cu.usbserial", "cu.usbmodem"
+            ]
 
         # Pass 1: strictly match priority keys
         for key in candidates_priority:
@@ -176,18 +185,19 @@ class SerialComm:
                         logger.info(f"找到可用设备: {p.device}")
                     return p.device
 
-        # Pass 2: if only /dev/tty.* is present, try map to /dev/cu.*
-        for p in ports:
-            dev = p.device
-            if dev.startswith('/dev/tty.'):
-                cu_candidate = dev.replace('/dev/tty.', '/dev/cu.')
-                if os.path.exists(cu_candidate) and os.access(cu_candidate, os.R_OK | os.W_OK):
-                    if should_log:
-                        logger.info(f"将 {dev} 映射为 {cu_candidate}")
-                    return cu_candidate
+        # Pass 2: if only /dev/tty.* is present on macOS, try map to /dev/cu.*
+        if platform.system() == "Darwin":
+            for p in ports:
+                dev = p.device
+                if dev.startswith('/dev/tty.'):
+                    cu_candidate = dev.replace('/dev/tty.', '/dev/cu.')
+                    if os.path.exists(cu_candidate) and os.access(cu_candidate, os.R_OK | os.W_OK):
+                        if should_log:
+                            logger.info(f"将 {dev} 映射为 {cu_candidate}")
+                        return cu_candidate
 
         if should_log:
-            logger.warning("未找到可用的串口设备（支持 cu.usbserial/cu.usbmodem/ttyUSB/COM）")
+            logger.warning("未找到可用的串口设备（支持 ttyUSB/ttyACM/cu.usbserial/cu.usbmodem/COM）")
         return ""
     
     def send_data(self, data: List[int]) -> bool:
