@@ -30,6 +30,7 @@ class DataParser:
     CMD_ZERO_POS = 0x03    # 机械臂以当前位置为零点  
     CMD_JOINT = 0x04       # 机械臂角度反馈与控制
     CMD_MULTI_ARM = 0x06   # 四机械臂角度反馈与控制
+    CMD_VERSION = 0x12     # 机械臂固件版本反馈
     CMD_TORQUE = 0x13      # 机械臂力矩控制
     CMD_ERROR = 0xEE       # 错误反馈
 
@@ -93,6 +94,8 @@ class DataParser:
             return self._parse_gripper_data(frame)
         elif cmd_id == self.CMD_ERROR:
             return self._parse_error_data(frame)
+        elif cmd_id == self.CMD_VERSION:
+            return self._parse_version_data(frame)
         else:
             if self.debug_mode:
                 logger.debug(f"未处理的指令ID: 0x{cmd_id:02X}")
@@ -316,6 +319,33 @@ class DataParser:
             "error_code": error_code,
             "error_param": error_param,
             "error_message": error_message,
+            "timestamp": time.time()
+        }
+    
+    def _parse_version_data(self, frame: List[int]) -> Dict:
+        """
+        解析版本数据帧 (0x12)
+        
+        Args:
+            frame: 完整的数据帧
+            
+        Returns:
+            Dict: 解析结果
+        """
+        # 检查数据长度
+        if len(frame) < 7:
+            logger.warning("版本数据帧长度不足")
+            return None
+        
+        # 提取版本信息
+        version_str = f"{frame[3]}.{frame[4]}.{frame[5]}"
+        
+        if self.debug_mode:
+            logger.debug(f"固件版本: {version_str}")
+        
+        return {
+            "type": "version_data",
+            "version": version_str,
             "timestamp": time.time()
         }
     

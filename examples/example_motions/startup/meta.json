@@ -1,0 +1,8 @@
+{
+  "action": "startup",
+  "created_at": "2025-08-15 17:48:10",
+  "planner": "cartesian",
+  "move_time": 10.0,
+  "sample_hz": 100.0,
+  "count": 5
+}

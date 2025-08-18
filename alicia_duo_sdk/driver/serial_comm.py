@@ -17,7 +17,7 @@ DEFAULT_LENGTH = 5
 class SerialComm:
     """机械臂串口通信模块 - 简化版"""
     
-    def __init__(self, lock: threading.Lock, port: str = "", baudrate: int = 1000000, 
+    def __init__(self, lock: threading.Lock, port: str = "", baudrate: int = 921600,
                 timeout: float = 1.0, debug_mode: bool = False):
         """
         初始化串口通信模块
@@ -31,7 +31,7 @@ class SerialComm:
         self.port_name = port
         self.baudrate = baudrate
         self.baudrate_default = 921600
-        self.baudrate_macOS = 1000000
+        self.baudrate_macOS = 921600
         self.timeout = timeout
         self.debug_mode = debug_mode
         
@@ -79,7 +79,7 @@ class SerialComm:
 
             # Do not force-change baudrate on macOS. Keep user/default and only log.
             if 'cu.usbserial' in port:
-                logger.info(f"当前波特率为 {self.baudrate}，如通信异常可尝试 921600/1000000/115200")
+                logger.info(f"当前波特率为 {self.baudrate}，如通信异常可尝试 921600/921600/115200")
 
             # Serial parameters: add write timeout and disable flow control
             self.serial_port = serial.Serial(
