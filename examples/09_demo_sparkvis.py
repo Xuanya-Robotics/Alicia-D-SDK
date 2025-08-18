@@ -273,7 +273,7 @@ def parse_args(argv: List[str]):
     import argparse
     parser = argparse.ArgumentParser(description='SparkVis ↔ 真实机器人 同步与数据记录 Demo')
     parser.add_argument('--serial-port', type=str, default='', help='串口设备，如 /dev/ttyUSB0（留空自动搜索）')
-    parser.add_argument('--baudrate', type=int, default=921600, help='串口波特率')
+    parser.add_argument('--baudrate', type=int, default=1000000, help='串口波特率，默认1000000，请使用00_demo_read_version.py检查版本号，如果显示超时或者多次尝试后均没有版本号输出，则使用921600')
     parser.add_argument('--host', type=str, default='localhost', help='WebSocket主机')
     parser.add_argument('--port', type=int, default=8765, help='WebSocket端口')
     parser.add_argument('--output-file', type=str, default='', help='CSV输出路径（留空不记录）')

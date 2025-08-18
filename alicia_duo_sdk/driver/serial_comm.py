@@ -8,16 +8,20 @@ from typing import List, Optional, Tuple
 import threading
 from datetime import datetime
 
-# 配置日志
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("SerialComm")
+from ..utils.logger import logger
+
+# # 配置日志
+# logging.basicConfig(level=logging.INFO, 
+#                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logger = logging.getLogger("SerialComm")
+
+
 READ_LENGTH = 50
 DEFAULT_LENGTH = 5
 class SerialComm:
     """机械臂串口通信模块 - 简化版"""
     
-    def __init__(self, lock: threading.Lock, port: str = "", baudrate: int = 921600,
+    def __init__(self, lock: threading.Lock, port: str = "", baudrate: int = 1000000,
                 timeout: float = 1.0, debug_mode: bool = False):
         """
         初始化串口通信模块
@@ -30,8 +34,8 @@ class SerialComm:
         """
         self.port_name = port
         self.baudrate = baudrate
-        self.baudrate_default = 921600
-        self.baudrate_macOS = 921600
+        self.baudrate_default = 1000000
+        self.baudrate_macOS = 1000000
         self.timeout = timeout
         self.debug_mode = debug_mode
         
@@ -79,7 +83,7 @@ class SerialComm:
 
             # Do not force-change baudrate on macOS. Keep user/default and only log.
             if 'cu.usbserial' in port:
-                logger.info(f"当前波特率为 {self.baudrate}，如通信异常可尝试 921600/921600/115200")
+                logger.info(f"当前波特率为 {self.baudrate}，如通信异常可尝试 1000000/1000000/115200")
 
             # Serial parameters: add write timeout and disable flow control
             self.serial_port = serial.Serial(
@@ -249,60 +253,83 @@ class SerialComm:
             Optional[List[int]]: 完整的数据帧，如果没有则返回None
         """
         try:
-            if not self.serial_port or not self.serial_port.is_open:
-                if not self.connect():
-                    return None
-            
-            # 检查是否有数据可读
-            if self.serial_port.in_waiting == 0:
-                return None
-            
-            # 导入串口缓存数据
-            self._rx_buffer += self.serial_port.read(self.serial_port.in_waiting)
-
-            while len(self._rx_buffer) >= READ_LENGTH:
-                # Step 1: 同步到帧头 0xAA
-                if self._rx_buffer[0] != 0xAA:
-                    self._rx_buffer.pop(0)
-                    continue
-
-                frame_length = self._rx_buffer[2] + DEFAULT_LENGTH       # 数据长度 + 基础长度
-                candidate = self._rx_buffer[:frame_length]
-
-                # Step 2: 验证帧尾和校验
-                valid_tail = candidate[-1] == 0xFF
-                valid_checksum = self._serial_data_check(candidate)
-
-                parsed = {
-                "timestamp": datetime.now().isoformat(),
-                "raw": ' '.join(f"{b:02X}" for b in candidate),
-                "raw_decimal": list(candidate),
-                "valid": valid_tail and valid_checksum
-            }
-            
-                if self.debug_mode:
-                    now = time.time()
-                    if self.debug_mode and now - self._last_print_time > 1.0:
-                        logger.info(f"[Frame] {parsed['raw_decimal']} {'(OK)' if parsed['valid'] else '(Invalid)'}")
-                        self._last_print_time = now
-
-                self._rx_buffer = self._rx_buffer[frame_length:]
-
-                 # Step 4: 若缓存过大，强制同步（防炸）
-                if len(self._rx_buffer) > 1000:
-                    aa_index = self._rx_buffer.find(0xAA)
-                    if aa_index == -1:
-                        self._rx_buffer.clear()
-                    else:
-                        self._rx_buffer = self._rx_buffer[aa_index:]
-
-                if parsed["valid"]:
-                    self._rx_buffer.clear()
-                    return candidate    
-                
+            frames = self.read_frames(max_frames=1)
+            if frames:
+                return frames
+            return None
         except Exception as e:
             logger.error(f"读取数据异常: {str(e)}")
             return 9999999
+
+    def read_frames(self, max_frames: int = 0, verify_checksum: bool = True) -> List[List[int]]:
+        """Read all complete frames currently in buffer.
+
+        :param max_frames, int: Maximum number of frames to return (0 means no limit)
+        :return: List of frames (each frame is a list of ints)
+        """
+        results: List[List[int]] = []
+        # Ensure connection
+        if not self.serial_port or not self.serial_port.is_open:
+            if not self.connect():
+                return results
+
+        # Pull available bytes into buffer
+        if self.serial_port.in_waiting > 0:
+            self._rx_buffer += self.serial_port.read(self.serial_port.in_waiting)
+
+        # Scan buffer for multiple 0xAA...0xFF segments
+        while True:
+            start_idx = self._rx_buffer.find(0xAA)
+            if start_idx == -1:
+                # no start marker, clear buffer and stop
+                self._rx_buffer.clear()
+                break
+
+            if start_idx > 0:
+                # drop leading noise
+                del self._rx_buffer[:start_idx]
+
+            end_idx = self._rx_buffer.find(0xFF, 1)
+            if end_idx == -1:
+                # wait for more data
+                break
+
+            candidate = self._rx_buffer[:end_idx + 1]
+
+            valid_tail = candidate[-1] == 0xFF
+            valid_checksum = True
+            if verify_checksum:
+                try:
+                    valid_checksum = self._serial_data_check(candidate)
+                except Exception:
+                    valid_checksum = False
+
+            if self.debug_mode:
+                now = time.time()
+                if now - self._last_print_time > 1.0:
+                    logger.info(
+                        f"[Frame] {list(candidate)} {'(OK)' if (valid_tail and valid_checksum) else '(Invalid)'}"
+                    )
+                    self._last_print_time = now
+
+            # consume this segment regardless validity
+            del self._rx_buffer[:end_idx + 1]
+
+            if valid_tail and valid_checksum:
+                results.append(list(candidate))
+
+                if max_frames > 0 and len(results) >= max_frames:
+                    break
+
+            # guard huge buffer
+            if len(self._rx_buffer) > 1000:
+                aa_index = self._rx_buffer.find(0xAA)
+                if aa_index == -1:
+                    self._rx_buffer.clear()
+                else:
+                    del self._rx_buffer[:aa_index]
+                    
+        return results
     
     def _serial_data_check(self, frame: bytearray) -> bool:
         """
@@ -315,7 +342,7 @@ class SerialComm:
             bool: 校验是否通过
         """
         data_len = frame[2]
-        if len(frame) != data_len + DEFAULT_LENGTH:
+        if len(frame) != data_len + DEFAULT_LENGTH and frame[1] != 0x12:
             return False
 
         payload = frame[3:3 + data_len]

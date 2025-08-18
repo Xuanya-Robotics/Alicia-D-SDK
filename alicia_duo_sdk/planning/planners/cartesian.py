@@ -2,7 +2,7 @@ from typing import List, Union, Optional, Tuple
 import numpy as np
 from scipy.spatial.transform import Rotation as R, Slerp
 from alicia_duo_sdk.kinematics import AliciaFollower
-from ...utils.logger import BeautyLogger
+from ...utils.logger import logger
 import time
 
 class CartesianPlanner:

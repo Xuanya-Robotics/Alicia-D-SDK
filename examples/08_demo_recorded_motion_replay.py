@@ -190,8 +190,12 @@ def main():
     est = traj[-1]['t'] / max(1e-6, args.speed)
     print(f"[resample] {len(traj)} -> {len(kf)} keyframes @ {SEG_HZ} Hz, play ~{est:.2f}s")
 
-    # 使用 ControlApi 在线插值（后台平滑），不经过带“按回车”的执行器
-    session = get_default_session(port=args.port)
+    # 创建会话和控制器
+    # !!! 请先使用00_demo_read_version.py检查版本号 !!!
+    # !!! 如果你能够读到版本号，版本号为5.4.19以上，则使用默认波特率1000000 !!!
+    # !!! 如果显示超时或者多次尝试后没有版本号输出，则使用默认波特率921600 !!!
+    session = get_default_session(baudrate=1000000, port=args.port)
+    # session = get_default_session(baudrate=921600, port=args.port)
     ctl     = ControlApi(session=session)
     arm     = session.joint_controller
 

@@ -6,7 +6,11 @@ from alicia_duo_sdk.controller import get_default_session, ControlApi
 
 def main():
     # 创建会话和控制器
-    session = get_default_session()
+    # !!! 请先使用00_demo_read_version.py检查版本号 !!!
+    # !!! 如果你能够读到版本号，版本号为5.4.19以上，则使用默认波特率1000000 !!!
+    # !!! 如果显示超时或者多次尝试后没有版本号输出，则使用默认波特率921600 !!!
+    session = get_default_session(baudrate=1000000)
+    # session = get_default_session(baudrate=921600)
     controller = ControlApi(session=session)
 
     try:
@@ -20,7 +24,7 @@ def main():
         controller.moveJ(
             joint_format='deg',              # 角度单位，可选 'rad' 或 'deg'
             target_joints=target_joints_deg,
-            speed_factor=5,                # 控制速度（1.0 = 默认速度）
+            speed_factor=1,                # 控制速度（1.0 = 默认速度）
             visualize=False                  # 可视化轨迹
         )
 

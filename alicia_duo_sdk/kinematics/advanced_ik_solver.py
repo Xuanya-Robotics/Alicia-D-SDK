@@ -2,10 +2,10 @@
 import numpy as np
 from typing import Dict, List, Tuple, Union
 from .robot_model import AliciaFollower
-from ..utils.logger import BeautyLogger
+from ..utils.logger import logger
 from scipy.spatial.transform import Rotation as R
 
-logger = BeautyLogger(log_dir="./logs", log_name="ik.log", verbose=False)
+# logger = BeautyLogger(log_dir="./logs", log_name="ik.log", verbose=False)
 
 class Advanced6DOFIKSolver:
     def __init__(self, robot_model: AliciaFollower, max_iters: int=150):

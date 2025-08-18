@@ -7,11 +7,14 @@ import numpy as np
 
 from .serial_comm import SerialComm
 from .data_parser import DataParser, JointState
+from ..utils.logger import logger
 
-# 配置日志
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("Controller")
+# # 配置日志
+# logging.basicConfig(level=logging.INFO, 
+#                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logger = logging.getLogger("Controller")
+
+# logger = BeautyLogger(log_dir="./logs", log_name="session.log", verbose=True)
 
 class ArmController:
     """机械臂控制模块"""
@@ -34,7 +37,7 @@ class ArmController:
     CMD_MULTI_ARM = 0x06   # 四机械臂角度反馈与控制
     CMD_TORQUE = 0x13      # 机械臂力矩控制
     
-    def __init__(self, port: str = "", baudrate: int = 921600, debug_mode: bool = False):
+    def __init__(self, port: str = "", baudrate: int = 1000000, debug_mode: bool = False):
         """
         初始化机械臂控制器
         
@@ -200,7 +203,8 @@ class ArmController:
                     break
                 if frame:
                     # 解析数据帧，更新内部状态
-                    self.data_parser.parse_frame(frame)
+                    for i in range(len(frame)):
+                        self.data_parser.parse_frame(frame[i])
         
             except Exception as e:
                 logger.error(f"状态更新线程异常: {str(e)}")

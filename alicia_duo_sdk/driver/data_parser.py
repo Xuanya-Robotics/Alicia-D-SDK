@@ -4,11 +4,12 @@ import logging
 from typing import List, Dict, Tuple, Optional, Union, NamedTuple
 import threading
 import copy
+from ..utils.logger import logger
 
-# 配置日志
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("DataParser")
+# # 配置日志
+# logging.basicConfig(level=logging.INFO, 
+#                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logger = logging.getLogger("DataParser")
 
 class JointState(NamedTuple):
     """关节状态数据结构"""
@@ -65,27 +66,27 @@ class DataParser:
         Returns:
             Dict: 解析结果，如果解析失败则返回None
         """
-        # 基本帧格式检查
-        if len(frame) < 5 or frame[0] != 0xAA or frame[-1] != 0xFF:
-            if self.debug_mode:
-                logger.warning(f"无效数据帧: {self._bytes_to_hex(frame)}")
-            return None
-        
+        # # 基本帧格式检查
+        # if len(frame) < 5 or frame[0] != 0xAA or frame[-1] != 0xFF:
+        #     if self.debug_mode:
+        #         logger.warning(f"无效数据帧: {self._bytes_to_hex(frame)}")
+        #     return None
+
         # 解析指令ID和数据长度
         cmd_id = frame[1]
         data_len = frame[2]
         
-        # 验证数据长度
-        if len(frame) != data_len + 5:  # 帧头(1) + 指令ID(1) + 长度(1) + 数据(n) + 校验(1) + 帧尾(1)
-            if self.debug_mode:
-                logger.warning(f"数据长度不匹配: 预期 {data_len + 5}, 实际 {len(frame)}")
-            return None
+        # # 验证数据长度
+        # if len(frame) != data_len + 5:  # 帧头(1) + 指令ID(1) + 长度(1) + 数据(n) + 校验(1) + 帧尾(1)
+        #     if self.debug_mode:
+        #         logger.warning(f"数据长度不匹配: 预期 {data_len + 5}, 实际 {len(frame)}")
+        #     return None
         
-        # 校验和验证
-        if not self._verify_checksum(frame):
-            if self.debug_mode:
-                logger.warning(f"校验和错误: {self._bytes_to_hex(frame)}")
-            return None
+        # # 校验和验证
+        # if not self._verify_checksum(frame):
+        #     if self.debug_mode:
+        #         logger.warning(f"校验和错误: {self._bytes_to_hex(frame)}")
+        #     return None
         
         # 根据指令ID解析数据
         if cmd_id == self.CMD_JOINT:
@@ -332,16 +333,9 @@ class DataParser:
         Returns:
             Dict: 解析结果
         """
-        # 检查数据长度
-        if len(frame) < 7:
-            logger.warning("版本数据帧长度不足")
-            return None
-        
         # 提取版本信息
         version_str = f"{frame[3]}.{frame[4]}.{frame[5]}"
-        
-        if self.debug_mode:
-            logger.debug(f"固件版本: {version_str}")
+        logger.info(f"固件版本: {version_str}")
         
         return {
             "type": "version_data",

@@ -12,6 +12,7 @@ Alicia-D SDK 是一个用于控制【灵动 Alicia-D】系列六轴机械臂（�
 *   **状态读取**：实时获取关节角、夹爪角与末端姿态。
 *   **自动串口连接**：自动搜索串口或手动指定。
 *   **教学模式**：拖动记录姿态点并执行轨迹。
+*   **智能日志系统**：支持日志级别过滤，可控制控制台输出详细程度。
 
 ## 项目结构
 
@@ -57,3 +58,4 @@ python3 demo_gripper.py         # 夹爪控制
 *   [安装指南](docs/installation.md)
 *   [示例说明](docs/examples.md)
 *   [API 参考](docs/api_reference.md)
+*   [日志级别过滤](docs/logger_levels.md)
