@@ -8,10 +8,11 @@
 
 ```
 examples/
+├── 00_demo_read_version.py          # 读取版本号
 ├── 01_demo_zero_calibration.py      # 归零校准
 ├── 02_demo_torque_control.py        # 扭矩控制
 ├── 03_demo_gripper.py               # 夹爪控制
-├── 04_demo_read_state.py            # 状态读取
+├── 04_demo_read_state.py            # 读取状态
 ├── 05_demo_moveJ.py                 # 关节空间运动
 ├── 06_demo_moveCartesian.py         # 笛卡尔空间运动
 ├── 07_demo_record_motion.py         # 轨迹录制
