@@ -1,24 +1,29 @@
-# 示例代码说明
+# 例程代码说明
 
 `examples/` 目录包含了多个演示脚本，用于展示如何使用 Alicia-D SDK 控制机械臂。
 
 ---
 
-## ✅ 如何运行
+## 📁 文件结构
 
-1. 安装 SDK 并连接好机械臂
-2. 进入示例目录：
-```bash
-cd examples
 ```
-3. 使用 Python3 运行任意示例：
-```bash
-python3 demo_read_state.py
+examples/
+├── 01_demo_zero_calibration.py      # 归零校准
+├── 02_demo_torque_control.py        # 扭矩控制
+├── 03_demo_gripper.py               # 夹爪控制
+├── 04_demo_read_state.py            # 状态读取
+├── 05_demo_moveJ.py                 # 关节空间运动
+├── 06_demo_moveCartesian.py         # 笛卡尔空间运动
+├── 07_demo_record_motion.py         # 轨迹录制
+├── 08_demo_recorded_motion_replay.py # 轨迹回放
+├── 09_demo_sparkvis.py              # SparkVis集成
+├── example_motions/                  # 录制的动作数据
+│   ├── startup/                      # 启动动作
+│   └── sleep/                        # 休眠动作
+└── README.md                         # 功能说明
 ```
 
----
-
-## 📜 示例列表
+## 📜 例程列表
 
 ### 0. `00_demo_read_version.py`
 **请在进行使用前打印机械臂版本号**
@@ -224,38 +229,6 @@ robot_sync_rate_hz=50.0,         # 机器人状态同步频率（Hz）
 2. 智能裁剪静止部分
 3. 重采样到30Hz
 4. 使用SDK内置在线插值平滑执行
-
----
-
-## 📁 文件结构
-
-```
-examples/
-├── 01_demo_zero_calibration.py      # 归零校准
-├── 02_demo_torque_control.py        # 扭矩控制
-├── 03_demo_gripper.py               # 夹爪控制
-├── 04_demo_read_state.py            # 状态读取
-├── 05_demo_moveJ.py                 # 关节空间运动
-├── 06_demo_moveCartesian.py         # 笛卡尔空间运动
-├── 07_demo_record_motion.py         # 轨迹录制
-├── 08_demo_recorded_motion_replay.py # 轨迹回放
-├── 09_demo_sparkvis.py              # SparkVis集成
-├── example_motions/                  # 录制的动作数据
-│   ├── startup/                      # 启动动作
-│   └── sleep/                        # 休眠动作
-└── README.md                         # 功能说明
-```
-
----
-
-## 🚀 技术特点
-
-- **无交互回放**：08_demo_recorded_motion_replay.py使用SDK内置在线插值，无需用户交互
-- **自适应处理**：智能识别和裁剪静止部分，提高回放效率
-- **高精度采样**：100Hz采样频率确保轨迹精度
-- **在线插值**：使用SDK内置的Online Smoothing功能，确保运动平滑
-- **WebSocket集成**：支持与SparkVis UI的实时双向通信
-- **参数化配置**：支持端口、动作名、速度、重复次数等参数
 
 ---
 

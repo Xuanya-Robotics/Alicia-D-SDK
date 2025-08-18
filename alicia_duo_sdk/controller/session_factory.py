@@ -27,7 +27,7 @@ def get_default_session(
         MotionSession: 构建完成的控制上下文
     """
     logger.module("[session] 开始构建默认会话")
-    logger.info("[session]] 初始化 AliciaFollower 模型")
+    logger.info("[session] 初始化 AliciaFollower 模型")
     robot_model = AliciaFollower()
 
     logger.info("[session] 初始化 IK 控制器")
