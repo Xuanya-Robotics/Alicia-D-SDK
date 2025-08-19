@@ -21,9 +21,9 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 try:
-    import websockets  # pip install websockets
+    import websockets  # pip install websockets==13.1
 except Exception as e:
-    print("请先安装 websockets: pip install websockets")
+    print("请先安装 websockets: pip install websockets==13.1")
     raise
 
 from alicia_duo_sdk.controller import get_default_session, ControlApi
@@ -272,10 +272,10 @@ class SparkVisBridge:
 def parse_args(argv: List[str]):
     import argparse
     parser = argparse.ArgumentParser(description='SparkVis ↔ 真实机器人 同步与数据记录 Demo')
-    parser.add_argument('--serial-port', type=str, default='', help='串口设备，如 /dev/ttyUSB0（留空自动搜索）')
+    parser.add_argument('--port', type=str, default='', help='串口设备，如 /dev/ttyUSB0（留空自动搜索）')
     parser.add_argument('--baudrate', type=int, default=1000000, help='串口波特率，默认1000000，请使用00_demo_read_version.py检查版本号，如果显示超时或者多次尝试后均没有版本号输出，则使用921600')
     parser.add_argument('--host', type=str, default='localhost', help='WebSocket主机')
-    parser.add_argument('--port', type=int, default=8765, help='WebSocket端口')
+    parser.add_argument('--websocket-port', type=int, default=8765, help='WebSocket端口')
     parser.add_argument('--output-file', type=str, default='', help='CSV输出路径（留空不记录）')
     parser.add_argument('--enable-robot-sync', action='store_true', help='启用 机器人→UI 状态同步')
     parser.add_argument('--robot-sync-rate', type=float, default=50.0, help='机器人状态广播频率 Hz')
@@ -287,7 +287,7 @@ def main():
     args = parse_args(sys.argv[1:])
 
     # 创建会话与控制器
-    session = get_default_session(port=args.serial_port, baudrate=args.baudrate)
+    session = get_default_session(port=args.port, baudrate=args.baudrate)
     controller = ControlApi(session=session)
 
     try:
@@ -297,7 +297,7 @@ def main():
         bridge = SparkVisBridge(
             controller=controller,
             host=args.host,
-            port=args.port,
+            port=args.websocket_port,
             output_file=args.output_file or None,
             enable_robot_sync=args.enable_robot_sync,
             robot_sync_rate_hz=args.robot_sync_rate,

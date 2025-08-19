@@ -72,11 +72,7 @@ class TrajectoryRecorder:
 def teaching_demo_cartesian(args):
     # === 初始化会话 ===
     # 创建会话和控制器
-    # !!! 请先使用00_demo_read_version.py检查版本号 !!!
-    # !!! 如果你能够读到版本号，版本号为5.4.19以上，则使用默认波特率1000000 !!!
-    # !!! 如果显示超时或者多次尝试后没有版本号输出，则使用默认波特率921600 !!!
-    session = get_default_session(baudrate=1000000, port=args.port)
-    # session = get_default_session(baudrate=921600, port=args.port)
+    session = get_default_session(baudrate=args.baudrate, port=args.port)
     controller = ControlApi(session=session)
 
     # === 交互式教学 ===
@@ -153,18 +149,23 @@ def teaching_demo_cartesian(args):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--port', default='COM6')
-    ap.add_argument('--time', type=float, default=10.0)
-    ap.add_argument('--planner', choices=['cartesian','lqt'], default='cartesian')
-    ap.add_argument('--motion', required=True, help='本次录制的动作名（将保存到 example_motions/<motion>/）')
-    ap.add_argument('--overwrite', motion='store_true', help='若已存在则覆盖')
-    ap.add_argument('--sample-hz', type=float, default=100.0, help='缓存关节轨迹的采样频率（Hz）')
-    ap.add_argument('--visualize', dest='visualize', motion='store_true')
-    ap.add_argument('--no-visualize', dest='visualize', motion='store_false')
-    ap.add_argument('--show-ori', dest='show_ori', motion='store_true')
-    ap.add_argument('--no-show-ori', dest='show_ori', motion='store_false')
-    ap.set_defaults(visualize=False, show_ori=True)
-    args = ap.parse_args()
+    import argparse
+    parser = argparse.ArgumentParser()
+    # !!! 请先使用00_demo_read_version.py检查版本号 !!!
+    # !!! 如果你能够读到版本号，版本号为5.4.19以上，则使用默认波特率1000000 !!!
+    # !!! 如果显示超时或者多次尝试后没有版本号输出，则使用默认波特率921600 !!!
+    parser.add_argument('--baudrate', type=int, default=1000000, help="波特率")
+    parser.add_argument('--port', default='COM6')
+    parser.add_argument('--time', type=float, default=10.0)
+    parser.add_argument('--planner', choices=['cartesian','lqt'], default='cartesian')
+    parser.add_argument('--motion', required=True, help='本次录制的动作名（将保存到 example_motions/<motion>/）')
+    parser.add_argument('--overwrite', motion='store_true', help='若已存在则覆盖')
+    parser.add_argument('--sample-hz', type=float, default=100.0, help='缓存关节轨迹的采样频率（Hz）')
+    parser.add_argument('--visualize', dest='visualize', motion='store_true')
+    parser.add_argument('--no-visualize', dest='visualize', motion='store_false')
+    parser.add_argument('--show-ori', dest='show_ori', motion='store_true')
+    parser.add_argument('--no-show-ori', dest='show_ori', motion='store_false')
+    parser.set_defaults(visualize=False, show_ori=True)
+    args = parser.parse_args()
 
     teaching_demo_cartesian(args)
