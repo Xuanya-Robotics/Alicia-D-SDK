@@ -63,6 +63,24 @@ class OnlineJointInterpolator:
         except Exception:
             pass
 
+    def sync_to_current_state(self) -> None:
+        """
+        Synchronize internal command and target to the robot's latest state.
+
+        :param None: 
+        :return: None
+        """
+        try:
+            cur = self._ctrl.get_joint_angles()
+            if cur and len(cur) == 6:
+                with self._lock:
+                    self._cmd_q = list(cur)
+                    self._target_q = list(cur)
+                    self._cmd_dq = [0.0] * 6
+                    self._has_target = False
+        except Exception:
+            pass
+
     def start(self) -> None:
         """
         :param None: 
@@ -70,6 +88,8 @@ class OnlineJointInterpolator:
         """
         if self._running:
             return
+        # Ensure we start from the latest robot state, not the constructor-time state
+        self.sync_to_current_state()
         self._running = True
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
